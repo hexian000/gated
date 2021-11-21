@@ -246,17 +246,19 @@ func (s *Server) closeAllSessions() {
 	}
 }
 
-// func (s *Server) deleteLostPeers() {
-// 	const peerTimeout = 50 * time.Hour
-// 	s.mu.Lock()
-// 	defer s.mu.Unlock()
-// 	// TODO
-// 	for name, peer := range s.peers {
-// 		if time.Since(peer.LastSeen) > peerTimeout {
-// 			delete(s.peers, name)
-// 		}
-// 	}
-// }
+func (s *Server) redialRProxy() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, peer := range s.peers {
+		if peer.rproxy && (peer.Session == nil || peer.Session.IsClosed()) {
+			go func() {
+				if err := peer.Dial(s); err != nil {
+					slog.Error("redial rproxy:", err)
+				}
+			}()
+		}
+	}
+}
 
 func (s *Server) watchdog() {
 	const (
@@ -280,6 +282,7 @@ func (s *Server) watchdog() {
 				lastSync = now
 			}
 			last = now
+			s.redialRProxy()
 		case call := <-s.rpcCall:
 			if call.Error != nil {
 				slog.Errorf("rpc: [%s] %v: %v", call.ServiceMethod, call.Reply, call.Error)
