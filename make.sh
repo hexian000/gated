@@ -24,14 +24,14 @@ case "$1" in
     # cross build for all supported targets
     # not supported targets are likely to work
     set -x
-    GOOS="linux" GOARCH="arm64" nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.linux-arm64
-    GOOS="linux" GOARCH="arm" GOARM=7 nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.linux-armv7
-    GOOS="linux" GOARCH="amd64" nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.linux-amd64
-    GOOS="windows" GOARCH="amd64" nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.windows-amd64.exe
+    GOOS="linux" GOARCH="arm64" nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.linux-arm64 cmd/gated/main.go
+    GOOS="linux" GOARCH="arm" GOARM=7 nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.linux-armv7 cmd/gated/main.go
+    GOOS="linux" GOARCH="amd64" nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.linux-amd64 cmd/gated/main.go
+    GOOS="windows" GOARCH="amd64" nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.windows-amd64.exe cmd/gated/main.go
     ;;
 *)
     # build for native system only
     set -x
-    nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated
+    nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated cmd/gated/main.go
     ;;
 esac
