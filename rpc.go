@@ -40,11 +40,6 @@ func (r *RPC) Bootstrap(args *proto.PeerInfo, reply *proto.Cluster) error {
 
 func (r *RPC) Add(args *proto.PeerInfo, reply *proto.None) error {
 	slog.Verbosef("RPC.Add: %v", args)
-	if peer := r.server.getPeer(args.PeerName); peer != nil &&
-		args.Timestamp <= peer.Info.Timestamp {
-		slog.Debugf("RPC.Add: discarded by timestamp %v", args)
-		return nil
-	}
 	r.server.Update(args)
 	return nil
 }

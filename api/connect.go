@@ -31,18 +31,21 @@ func (s *Server) ServeConnect(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if proxyURL != nil {
-		addr = proxyURL.Host
+		addr = proxyURL.Host + ":80"
 	}
 
 	ctx := util.WithTimeout(s.cfg.Timeout)
 	defer util.Cancel(ctx)
 	const network = "tcp"
+	slog.Debug("http connect: dial", addr)
 	dialed, err := s.router.DialContext(ctx, network, addr)
 	if err != nil {
+		slog.Debug("routed dial:", err)
 		s.gatewayError(w, err)
 		return
 	}
 	if proxyURL != nil {
+		slog.Debug("http connect: CONNECT ", req.Host)
 		conn := proxy.Client(dialed, req.Host)
 		err = conn.HandshakeContext(ctx)
 		if err != nil {

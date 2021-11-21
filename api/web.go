@@ -4,14 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"net/http"
-	"regexp"
 	"time"
 
 	"github.com/hexian000/gated/version"
-)
-
-var (
-	statusPattern = regexp.MustCompile(`^` + WebStatus + `(.+)$`)
 )
 
 func (s *Server) webError(w http.ResponseWriter, msg string, code int) {
@@ -21,16 +16,6 @@ func (s *Server) webError(w http.ResponseWriter, msg string, code int) {
 func (s *Server) handleStatus(respWriter http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
 		s.webError(respWriter, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
-	}
-	matches := statusPattern.FindStringSubmatch(req.URL.Path)
-	if matches == nil || len(matches) != 2 {
-		http.Redirect(respWriter, req, WebStatus+s.cfg.Name, http.StatusFound)
-		return
-	}
-	peer := matches[1]
-	if peer != s.cfg.Name {
-		s.proxy(s.apiClient(peer), respWriter, req)
 		return
 	}
 

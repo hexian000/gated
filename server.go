@@ -66,13 +66,6 @@ func NewServer(cfg *Config) *Server {
 		Router:    s.router,
 		Cluster:   s,
 	})
-	for _, server := range cfg.main.Servers {
-		peer := &Peer{Info: &proto.PeerInfo{
-			Address:    server.Address,
-			ServerName: server.ServerName,
-		}}
-		s.addPeer(peer)
-	}
 	return s
 }
 
@@ -90,6 +83,10 @@ func (s *Server) Serve(l net.Listener) {
 	}
 }
 
+func (s *Server) LocalPeerName() string {
+	return s.cfg.Current().Name
+}
+
 func (s *Server) Start() error {
 	cfg := s.cfg.Current()
 	if cfg.Listen != "" {
@@ -102,12 +99,15 @@ func (s *Server) Start() error {
 		s.tlsListener = l
 		go s.Serve(l)
 	}
-	for _, peer := range s.peers {
-		go func(peer *Peer) {
-			if err := peer.Dial(s); err != nil {
-				slog.Error("bootstrap:", err)
-			}
-		}(peer)
+	for _, server := range cfg.Servers {
+		peer := &Peer{Info: &proto.PeerInfo{
+			Address:    server.Address,
+			ServerName: server.ServerName,
+		}}
+		if err := peer.Dial(s); err != nil {
+			slog.Error("bootstrap:", err)
+		}
+		s.addPeer(peer)
 	}
 	if cfg.ProxyListen != "" {
 		slog.Verbose("http listen:", cfg.ProxyListen)
@@ -140,7 +140,9 @@ func (s *Server) Update(info *proto.PeerInfo) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if p, ok := s.peers[info.PeerName]; ok {
-			p.Info = info
+			if info.Timestamp > p.Info.Timestamp {
+				p.Info = info
+			}
 		}
 	}()
 	s.updateRoute(info)

@@ -19,6 +19,7 @@ const (
 )
 
 type Cluster interface {
+	LocalPeerName() string
 	DialPeerContext(ctx context.Context, peer string) (net.Conn, error)
 }
 
@@ -85,15 +86,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	hostname := req.URL.Hostname()
-	if hostname == "" || strings.EqualFold(hostname, s.GetAPIDomain()) {
+	apiDomain := s.GetAPIDomain()
+
+	if peer, ok := util.StripDomain(hostname, apiDomain); hostname == "" ||
+		strings.EqualFold(hostname, apiDomain) || (ok && peer == s.peers.LocalPeerName()) {
 		if s.mux != nil {
 			s.mux.ServeHTTP(w, req)
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 		}
 		return
-	}
-	if peer, ok := util.StripDomain(hostname, s.GetAPIDomain()); ok {
+	} else if ok {
 		client := s.apiClient(peer)
 		s.proxy(client, w, req)
 		return

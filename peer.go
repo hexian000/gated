@@ -91,7 +91,8 @@ func (p *Peer) Dial(s *Server) error {
 	slog.Debugf("bootstrap: reply: %v", reply)
 	peerInfo := reply.Self
 	p.Info = &peerInfo
-	s.router.merge(reply.Routes)
+	s.updateRoute(&reply.Self)
+	s.Merge(&reply)
 	slog.Verbose("bootstrap: ok")
 	return nil
 }

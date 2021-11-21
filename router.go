@@ -105,7 +105,7 @@ func (r *Router) Resolve(host string) (*url.URL, error) {
 		slog.Debug("router resolve:", host, "via", peer)
 		return url.Parse(r.makeURL(peer))
 	}
-	slog.Debug("router resolve:", host, "goes default")
+	slog.Debugf("router resolve: %s goes default (%v)", host, r.defaultProxy)
 	return r.defaultProxy, nil
 }
 

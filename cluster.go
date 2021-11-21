@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/hexian000/gated/api/proto"
+	"github.com/hexian000/gated/slog"
 )
 
 func (s *Server) getPeer(name string) *Peer {
@@ -61,28 +62,33 @@ func (s *Server) ClusterInfo() *proto.Cluster {
 	}
 }
 
-func (s *Server) merge(data *proto.Cluster) {
+func (s *Server) merge(info *proto.PeerInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	now := time.Now()
-	for host, info := range data.Peers {
-		info := info
-		if p, ok := s.peers[host]; ok {
-			if p.Info.Timestamp < info.Timestamp {
-				p.Info = &info
-				p.LastSeen = now
-			}
-			continue
+	if p, ok := s.peers[info.PeerName]; ok {
+		if p.Info.Timestamp < info.Timestamp {
+			slog.Debug("peers merge update:", info)
+			p.Info = info
+			p.LastSeen = time.Now()
 		}
-		s.peers[host] = &Peer{
-			Info:       &info,
-			Created:    now,
+		return
+	} else {
+		slog.Debug("peers merge add:", info)
+		now := time.Now()
+		s.peers[info.PeerName] = &Peer{
+			Info:     info,
+			Created:  now,
 			LastSeen: now,
 		}
 	}
 }
 
 func (s *Server) Merge(data *proto.Cluster) {
-	s.merge(data)
+	s.merge(&data.Self)
+	for _, info := range data.Peers {
+		info := info
+		s.merge(&info)
+	}
+	slog.Debug("peers merged:", s.peers)
 	s.router.merge(data.Routes)
 }
