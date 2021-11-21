@@ -136,15 +136,7 @@ func (s *Server) updateRoute(info *proto.PeerInfo) {
 }
 
 func (s *Server) Update(info *proto.PeerInfo) {
-	func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if p, ok := s.peers[info.PeerName]; ok {
-			if info.Timestamp > p.Info.Timestamp {
-				p.Info = info
-			}
-		}
-	}()
+	s.merge(info)
 	s.updateRoute(info)
 }
 
