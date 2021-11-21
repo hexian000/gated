@@ -1,0 +1,21 @@
+{
+    "name": "peer1",
+    "listen": ":50101",
+    "addr": "127.0.0.1:50101",
+    "proxylisten": "127.0.0.1:8080",
+    "servers": [
+        {
+            "addr": "127.0.0.1:50100"
+        }
+    ],
+    "hosts": {
+        "peer1.lan": "127.0.1.1"
+    },
+    "auth": {
+        "cert": "peer1-cert.pem",
+        "key": "peer1-key.pem",
+        "authcerts": [
+            "server-cert.pem"
+        ]
+    }
+}

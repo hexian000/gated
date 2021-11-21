@@ -1,0 +1,14 @@
+[Unit]
+Description=gated
+
+[Service]
+Type=notify
+Restart=always
+RestartSec=10s
+ExecStart=%h/.local/bin/gated -c config.json
+ExecReload=kill -HUP $MAINPID
+TimeoutSec=10s
+WorkingDirectory=%h
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,17 @@
+{
+    "name": "server",
+    "listen": ":50100",
+    "addr": "127.0.0.1:50100",
+    "proxylisten": "127.0.0.1:8080",
+    "hosts": {
+        "server.lan": "127.0.0.1"
+    },
+    "auth": {
+        "cert": "server-cert.pem",
+        "key": "server-key.pem",
+        "authcerts": [
+            "peer1-cert.pem",
+            "peer2-cert.pem"
+        ]
+    }
+}
