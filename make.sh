@@ -7,14 +7,15 @@ VERSION=""
 if git rev-parse --git-dir >/dev/null 2>&1; then
     VERSION="$(git tag --points-at HEAD)"
     if [ -z "${VERSION}" ]; then
-        VERSION="dev-$(git rev-parse --short HEAD)"
+        VERSION="git-$(git rev-parse --short HEAD)"
     fi
 fi
 
 GOFLAGS="-trimpath -mod vendor"
 LDFLAGS=""
+echo "+ version: ${VERSION}"
 if [ -n "${VERSION}" ]; then
-    LDFLAGS="${LDFLAGS} -X version.Tag=${VERSION}"
+    LDFLAGS="${LDFLAGS} -X github.com/hexian000/gated/version.tag=${VERSION}"
 fi
 
 export CGO_ENABLED=0

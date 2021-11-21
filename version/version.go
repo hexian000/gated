@@ -5,30 +5,26 @@ import (
 	"time"
 )
 
-const (
-	Major    = 0
-	Minor    = 0
-	Revision = 0
-
-	Tag      = ""
-	Homepage = "https://github.com/hexian000/gated"
+var (
+	tag      = ""
+	homepage = "https://github.com/hexian000/gated"
 )
 
 func init() {
-	fmt.Printf("gated %s\n  %s\n", Version(), Homepage)
+	fmt.Printf("gated %s\n  %s\n", Version(), homepage)
 }
 
 func Version() string {
-	if Tag != "" {
-		return Tag
+	if tag != "" {
+		return tag
 	}
-	return fmt.Sprintf("v%d.%d.%d", Major, Minor, Revision)
+	return "development"
 }
 
 func WebBanner(hostname string) string {
 	return fmt.Sprintf(
-		"tlswrapper@%s %s\n  %s\n\nserver time: %v\n\n",
-		hostname, Version(), Homepage,
+		"gated@%s %s\n  %s\n\nserver time: %v\n\n",
+		hostname, Version(), homepage,
 		time.Now().Format(time.RFC3339),
 	)
 }
