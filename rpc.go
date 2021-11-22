@@ -16,7 +16,7 @@ func (s *Server) broadcast(method string, args interface{}, reply func() interfa
 	chOut := make(chan *rpc.Call, 8)
 	count := 0
 	for name, peer := range s.peers {
-		if peer.Info.Address == "" {
+		if peer.Info.Address == "" && !peer.IsConnected() {
 			continue
 		}
 		if err := peer.Dial(s); err != nil {
