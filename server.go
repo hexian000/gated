@@ -88,7 +88,7 @@ func (s *Server) Start() error {
 		go s.Serve(l)
 	}
 	for _, server := range cfg.Servers {
-		peer := &Peer{Info: &proto.PeerInfo{
+		peer := &Peer{Info: proto.PeerInfo{
 			Address:    server.Address,
 			ServerName: server.ServerName,
 		}}
@@ -155,7 +155,7 @@ func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, er
 		return p.Session.Open()
 	}
 
-	if p.Info != nil && p.Info.Address != "" {
+	if p.Info.Address != "" {
 		if err := p.Dial(s); err != nil {
 			return nil, err
 		}

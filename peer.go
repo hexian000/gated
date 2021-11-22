@@ -14,7 +14,7 @@ import (
 
 type Peer struct {
 	Session   *yamux.Session
-	Info      *proto.PeerInfo
+	Info      proto.PeerInfo
 	Created   time.Time
 	LastSeen  time.Time
 	rpcServer *rpc.Server
@@ -22,7 +22,7 @@ type Peer struct {
 }
 
 func (p *Peer) IsConnected() bool {
-	return p.Info != nil && p.Session != nil && !p.Session.IsClosed()
+	return p.Session != nil && !p.Session.IsClosed()
 }
 
 func (p *Peer) Dial(s *Server) error {
@@ -91,8 +91,7 @@ func (p *Peer) Dial(s *Server) error {
 		return err
 	}
 	slog.Debugf("bootstrap: reply: %v", reply)
-	peerInfo := reply.Self
-	p.Info = &peerInfo
+	p.Info = reply.Self
 	s.Merge(&reply)
 	slog.Verbose("bootstrap: ok")
 	s.print()

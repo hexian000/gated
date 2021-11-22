@@ -46,7 +46,7 @@ type RPC struct {
 
 func (r *RPC) Bootstrap(args *proto.PeerInfo, reply *proto.Cluster) error {
 	slog.Verbosef("RPC.Bootstrap: %v", args)
-	r.peer.Info = args
+	r.peer.Info = *args
 	_ = r.server.broadcast("RPC.Update", args, func() interface{} { return &proto.None{} })
 	r.server.addPeer(r.peer)
 	*reply = *r.server.ClusterInfo()

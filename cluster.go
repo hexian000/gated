@@ -46,7 +46,7 @@ func (s *Server) Peers() map[string]proto.PeerInfo {
 	peers := make(map[string]proto.PeerInfo)
 	for host, peer := range s.peers {
 		if peer.Info.Address != "" {
-			peers[host] = *peer.Info
+			peers[host] = peer.Info
 		}
 	}
 	return peers
@@ -66,7 +66,7 @@ func (s *Server) merge(info *proto.PeerInfo) bool {
 	if p, ok := s.peers[info.PeerName]; ok {
 		if p.Info.Timestamp < info.Timestamp {
 			slog.Debug("peers merge update:", info)
-			p.Info = info
+			p.Info = *info
 			p.LastSeen = time.Now()
 			return true
 		}
@@ -75,7 +75,7 @@ func (s *Server) merge(info *proto.PeerInfo) bool {
 	slog.Debug("peers merge add:", info)
 	now := time.Now()
 	s.peers[info.PeerName] = &Peer{
-		Info:     info,
+		Info:     *info,
 		Created:  now,
 		LastSeen: now,
 	}
