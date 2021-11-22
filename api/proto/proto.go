@@ -6,7 +6,6 @@ type PeerInfo struct {
 	ServerName string   `json:"sni,omitempty"`
 	Address    string   `json:"addr,omitempty"`
 	RemoteAddr string   `json:"remote"`
-	RProxy     string   `json:"rproxy,omitempty"`
 	Hosts      []string `json:"hosts,omitempty"`
 }
 
@@ -16,9 +15,11 @@ type Cluster struct {
 	Routes map[string]string   `json:"routes,omitempty"`
 }
 
-type None struct{}
-
-func (i *PeerInfo) Clone() *PeerInfo {
-	shallowCopy := *i
-	return &shallowCopy
+type Ping struct {
+	Timestamp   int64  `json:"timestamp"`
+	Source      string `json:"source"`
+	Destination string `json:"dest"`
+	TTL         int    `json:"ttl,omitempty"`
 }
+
+type None struct{}

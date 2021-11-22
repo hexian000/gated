@@ -19,7 +19,6 @@ type Peer struct {
 	LastSeen  time.Time
 	rpcServer *rpc.Server
 	rpcClient *rpc.Client
-	rproxy    bool
 }
 
 func (p *Peer) IsConnected() bool {
@@ -27,6 +26,9 @@ func (p *Peer) IsConnected() bool {
 }
 
 func (p *Peer) Dial(s *Server) error {
+	if p.IsConnected() {
+		return nil
+	}
 	ctx := util.WithTimeout(s.cfg.Timeout())
 	defer util.Cancel(ctx)
 	slog.Verbose("bootstrap: setup connection")
@@ -81,7 +83,7 @@ func (p *Peer) Dial(s *Server) error {
 		slog.Info("session closing:", err)
 	}()
 	slog.Verbose("bootstrap: rpc roundtripping")
-	args := s.self.Clone()
+	args := s.self()
 	args.Timestamp = NewTimestamp()
 	var reply proto.Cluster
 	err = rpcClient.Call("RPC.Bootstrap", args, &reply)
@@ -91,8 +93,16 @@ func (p *Peer) Dial(s *Server) error {
 	slog.Debugf("bootstrap: reply: %v", reply)
 	peerInfo := reply.Self
 	p.Info = &peerInfo
-	s.updateRoute(&reply.Self)
 	s.Merge(&reply)
 	slog.Verbose("bootstrap: ok")
+	s.print()
+	s.router.print()
+	return nil
+}
+
+func (p *Peer) Close() error {
+	if p.Session != nil {
+		return p.Session.Close()
+	}
 	return nil
 }

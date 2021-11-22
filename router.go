@@ -2,7 +2,6 @@ package gated
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -41,13 +40,20 @@ func NewRouter(domain string, defaultPeer string, server *Server, hosts map[stri
 		DialContext: r.DialContext,
 	}
 	if defaultPeer != "" {
-		r.defaultProxy, _ = url.Parse(r.makeURL(defaultPeer))
+		r.defaultProxy = r.makeURL(defaultPeer)
 	}
 	return r
 }
 
-func (r *Router) makeURL(peer string) string {
-	return fmt.Sprintf("http://%s.%s", peer, r.domain)
+func (r *Router) GetRouteHost(peer string) string {
+	return peer + "." + r.domain
+}
+
+func (r *Router) makeURL(peer string) *url.URL {
+	return &url.URL{
+		Scheme: "http",
+		Host:   r.GetRouteHost(peer),
+	}
 }
 
 func (r *Router) merge(routes map[string]string) {
@@ -55,14 +61,6 @@ func (r *Router) merge(routes map[string]string) {
 	defer r.mu.Unlock()
 	for host, peer := range routes {
 		r.routes[host] = peer
-	}
-	{
-		b, _ := json.Marshal(r.routes)
-		slog.Verbose("router update: routes:", string(b))
-	}
-	{
-		b, _ := json.Marshal(r.hosts)
-		slog.Verbose("router update: hosts:", string(b))
 	}
 }
 
@@ -72,14 +70,13 @@ func (r *Router) update(hosts []string, peer string) {
 	for _, host := range hosts {
 		r.routes[host] = peer
 	}
-	{
-		b, _ := json.Marshal(r.routes)
-		slog.Verbose("router update: routes:", string(b))
-	}
-	{
-		b, _ := json.Marshal(r.hosts)
-		slog.Verbose("router update: hosts:", string(b))
-	}
+}
+
+func (r *Router) print() {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	slog.Debug("router routes:", r.routes)
+	slog.Debug("router hosts:", r.hosts)
 }
 
 func (r *Router) Routes() map[string]string {
@@ -102,8 +99,12 @@ func (r *Router) Resolve(host string) (*url.URL, error) {
 	}
 	if peer, ok := r.routes[host]; ok {
 		// routed
+		peer, err := r.server.FindProxy(peer)
+		if err != nil {
+			return nil, err
+		}
 		slog.Debug("router resolve:", host, "via", peer)
-		return url.Parse(r.makeURL(peer))
+		return r.makeURL(peer), nil
 	}
 	slog.Debugf("router resolve: %s goes default (%v)", host, r.defaultProxy)
 	return r.defaultProxy, nil

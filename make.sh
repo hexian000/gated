@@ -9,11 +9,14 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
     if [ -z "${VERSION}" ]; then
         VERSION="git-$(git rev-parse --short HEAD)"
     fi
+    if ! git diff --quiet; then
+        VERSION="${VERSION}+"
+    fi
 fi
+echo "+ version: ${VERSION}"
 
 GOFLAGS="-trimpath -mod vendor"
 LDFLAGS=""
-echo "+ version: ${VERSION}"
 if [ -n "${VERSION}" ]; then
     LDFLAGS="${LDFLAGS} -X github.com/hexian000/gated/version.tag=${VERSION}"
 fi

@@ -7,6 +7,20 @@ import (
 	"github.com/hexian000/gated/slog"
 )
 
+func (s *Server) self() proto.PeerInfo {
+	cfg := s.cfg.Current()
+	hosts := []string(nil)
+	for host := range cfg.Hosts {
+		hosts = append(hosts, host)
+	}
+	return proto.PeerInfo{
+		PeerName:   cfg.Name,
+		ServerName: cfg.ServerName,
+		Address:    cfg.AdvertiseAddr,
+		Hosts:      hosts,
+	}
+}
+
 func (s *Server) getPeer(name string) *Peer {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -14,12 +28,16 @@ func (s *Server) getPeer(name string) *Peer {
 }
 
 func (s *Server) addPeer(peer *Peer) {
+	name := peer.Info.PeerName
 	func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		s.peers[peer.Info.PeerName] = peer
+		if peer, ok := s.peers[name]; ok && peer.Session != nil {
+			_ = peer.Session.Close()
+		}
+		s.peers[name] = peer
 	}()
-	s.updateRoute(peer.Info)
+	s.router.update(peer.Info.Hosts, name)
 }
 
 func (s *Server) Peers() map[string]proto.PeerInfo {
@@ -35,34 +53,14 @@ func (s *Server) Peers() map[string]proto.PeerInfo {
 }
 
 func (s *Server) ClusterInfo() *proto.Cluster {
-	myName := func() string {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-		return s.self.PeerName
-	}()
-	routes := s.router.Routes()
-	for host, name := range routes {
-		peer := s.getPeer(name)
-		if peer == nil {
-			continue
-		}
-		if peer.rproxy {
-			routes[host] = myName
-			continue
-		}
-		if peer.Info.Address == "" {
-			delete(routes, host)
-			continue
-		}
-	}
 	return &proto.Cluster{
-		Self:   *s.self,
+		Self:   s.self(),
 		Peers:  s.Peers(),
-		Routes: routes,
+		Routes: s.router.Routes(),
 	}
 }
 
-func (s *Server) merge(info *proto.PeerInfo) {
+func (s *Server) merge(info *proto.PeerInfo) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if p, ok := s.peers[info.PeerName]; ok {
@@ -70,25 +68,35 @@ func (s *Server) merge(info *proto.PeerInfo) {
 			slog.Debug("peers merge update:", info)
 			p.Info = info
 			p.LastSeen = time.Now()
+			return true
 		}
-		return
-	} else {
-		slog.Debug("peers merge add:", info)
-		now := time.Now()
-		s.peers[info.PeerName] = &Peer{
-			Info:     info,
-			Created:  now,
-			LastSeen: now,
-		}
+		return false
 	}
+	slog.Debug("peers merge add:", info)
+	now := time.Now()
+	s.peers[info.PeerName] = &Peer{
+		Info:     info,
+		Created:  now,
+		LastSeen: now,
+	}
+	return true
 }
 
 func (s *Server) Merge(data *proto.Cluster) {
-	s.merge(&data.Self)
+	if s.merge(&data.Self) {
+		s.router.update(data.Self.Hosts, data.Self.PeerName)
+	}
 	for _, info := range data.Peers {
 		info := info
-		s.merge(&info)
+		if s.merge(&info) {
+			s.router.update(info.Hosts, info.PeerName)
+		}
 	}
-	slog.Debug("peers merged:", s.peers)
 	s.router.merge(data.Routes)
+}
+
+func (s *Server) print() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	slog.Debug("peers:", s.peers)
 }

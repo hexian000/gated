@@ -24,7 +24,6 @@ const network = "tcp"
 type Server struct {
 	mu sync.RWMutex
 
-	self   *proto.PeerInfo
 	dialer net.Dialer
 	peers  map[string]*Peer
 	cfg    *Config
@@ -39,20 +38,9 @@ type Server struct {
 }
 
 func NewServer(cfg *Config) *Server {
-	hosts := []string(nil)
-	for host := range cfg.main.Hosts {
-		hosts = append(hosts, host)
-	}
 	s := &Server{
-		cfg:   cfg,
-		peers: make(map[string]*Peer),
-		self: &proto.PeerInfo{
-			PeerName:   cfg.main.Name,
-			ServerName: cfg.main.ServerName,
-			Address:    cfg.main.AdvertiseAddr,
-			RProxy:     cfg.main.RProxy,
-			Hosts:      hosts,
-		},
+		cfg:        cfg,
+		peers:      make(map[string]*Peer),
 		rpcCall:    make(chan *rpc.Call, 8),
 		shutdownCh: make(chan struct{}),
 	}
@@ -127,53 +115,53 @@ func (s *Server) Shutdown(ctx context.Context) {
 	panic("TODO")
 }
 
-func (s *Server) updateRoute(info *proto.PeerInfo) {
-	if info.RProxy != "" && info.RProxy != s.self.PeerName {
-		s.router.update(info.Hosts, info.RProxy)
-	} else {
+func (s *Server) Update(info *proto.PeerInfo) bool {
+	if s.merge(info) {
 		s.router.update(info.Hosts, info.PeerName)
+		return true
 	}
+	return false
 }
 
-func (s *Server) Update(info *proto.PeerInfo) {
-	s.merge(info)
-	s.updateRoute(info)
+func (s *Server) FindProxy(peer string) (string, error) {
+	if p := s.getPeer(peer); p != nil {
+		if p.Info.Address != "" {
+			return peer, nil
+		}
+	}
+	ch := s.broadcast("RPC.Ping", &proto.Ping{
+		Timestamp:   time.Now().UnixMilli(),
+		Source:      s.LocalPeerName(),
+		Destination: peer,
+		TTL:         1,
+	}, func() interface{} { return &proto.Ping{} })
+	for call := range ch {
+		if call.Error != nil {
+			slog.Verbose("ping:", call.Error)
+			continue
+		}
+		return call.Reply.(*proto.Ping).Source, nil
+	}
+	return "", fmt.Errorf("ping: %s is unreachable", peer)
 }
 
 func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, error) {
-	// fast path
-	session, err := func() (*yamux.Session, error) {
-		p := s.getPeer(peer)
-		if p == nil {
-			return nil, fmt.Errorf("unknown peer: %s", peer)
-		}
-		if !p.IsConnected() {
-			return nil, nil
-		}
-		return p.Session, nil
-	}()
-	if err != nil {
-		return nil, err
-	}
-	if session != nil {
-		return session.Open()
+	p := s.getPeer(peer)
+	if p == nil {
+		return nil, fmt.Errorf("unknown peer: %s", peer)
 	}
 
-	// slow path
-	session, err = func() (*yamux.Session, error) {
-		p := s.getPeer(peer)
-		if p == nil {
-			return nil, fmt.Errorf("unknown peer: %s", peer)
-		}
+	if p.Session != nil && !p.Session.IsClosed() {
+		return p.Session.Open()
+	}
+
+	if p.Info != nil && p.Info.Address != "" {
 		if err := p.Dial(s); err != nil {
 			return nil, err
 		}
-		return p.Session, nil
-	}()
-	if err != nil {
-		return nil, err
+		return p.Session.Open()
 	}
-	return session.Open()
+	return nil, nil
 }
 
 func (s *Server) serve(tcpConn net.Conn) {
@@ -246,17 +234,21 @@ func (s *Server) closeAllSessions() {
 	}
 }
 
-func (s *Server) redialRProxy() {
+func (s *Server) redial() {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, peer := range s.peers {
-		if peer.rproxy && (peer.Session == nil || peer.Session.IsClosed()) {
-			go func() {
-				if err := peer.Dial(s); err != nil {
-					slog.Error("redial rproxy:", err)
-				}
-			}()
+		if peer.Info.Address == "" {
+			continue
 		}
+		if peer.Session != nil && !peer.Session.IsClosed() {
+			continue
+		}
+		go func(peer *Peer) {
+			if err := peer.Dial(s); err != nil {
+				slog.Error("redial rproxy:", err)
+			}
+		}(peer)
 	}
 }
 
@@ -277,12 +269,14 @@ func (s *Server) watchdog() {
 				slog.Warning("system hang detected, closing all sessions")
 				s.closeAllSessions()
 			} else if now.Sub(lastSync) > syncInterval {
-				s.broadcast("RPC.Update", s.ClusterInfo())
+				s.broadcast("RPC.Sync", s.ClusterInfo(), func() interface{} { return &proto.None{} })
 				// s.deleteLostPeers()
 				lastSync = now
 			}
 			last = now
-			s.redialRProxy()
+			if s.cfg.Current().AdvertiseAddr == "" {
+				s.redial()
+			}
 		case call := <-s.rpcCall:
 			if call.Error != nil {
 				slog.Errorf("rpc: [%s] %v: %v", call.ServiceMethod, call.Reply, call.Error)

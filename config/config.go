@@ -32,7 +32,6 @@ type Main struct {
 	Listen        string            `json:"listen"`
 	ProxyListen   string            `json:"proxylisten"`
 	AdvertiseAddr string            `json:"addr"`
-	RProxy        string            `json:"rproxy"`
 	Servers       []Server          `json:"servers"`
 	Hosts         map[string]string `json:"hosts"`
 	DefaultRoute  string            `json:"default"`
