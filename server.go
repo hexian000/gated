@@ -302,6 +302,16 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 	(&metric.Runtime{}).CollectMetrics(w)
 	_, _ = w.WriteString("\n")
 
+	_, _ = w.WriteString("=== Peers ===\n\n")
+	func() {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		for name, peer := range s.peers {
+			w.WriteString(fmt.Sprintf("%s: %v", name, peer.IsConnected()))
+		}
+	}()
+	_, _ = w.WriteString("\n")
+
 	_, _ = w.WriteString("=== Server ===\n\n")
 	s.api.CollectMetrics(w)
 	_, _ = w.WriteString("\n")
