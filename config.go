@@ -45,12 +45,16 @@ func (c *Config) Load(cfg *config.Main) error {
 			return err
 		}
 	}
+	sni := cfg.ServerName
+	if sni == "" {
+		sni = "example.com"
+	}
 	tlsCfg := &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		ClientCAs:    certPool,
 		RootCAs:      certPool,
-		ServerName:   cfg.ServerName,
+		ServerName:   sni,
 		MinVersion:   tls.VersionTLS13,
 		MaxVersion:   tls.VersionTLS13,
 	}

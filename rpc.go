@@ -1,6 +1,7 @@
 package gated
 
 import (
+	"context"
 	"fmt"
 	"net/rpc"
 	"reflect"
@@ -8,20 +9,17 @@ import (
 
 	"github.com/hexian000/gated/api/proto"
 	"github.com/hexian000/gated/slog"
+	"github.com/hexian000/gated/util"
 )
 
-func (s *Server) broadcast(method string, args interface{}, replyType reflect.Type) <-chan *rpc.Call {
+func (s *Server) broadcast(ctx context.Context, method string, args interface{}, replyType reflect.Type) <-chan *rpc.Call {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	chIn := make(chan *rpc.Call, 8)
-	chOut := make(chan *rpc.Call, 8)
+	chIn := make(chan *rpc.Call, 10)
+	chOut := make(chan *rpc.Call, 10)
 	count := 0
 	for name, peer := range s.peers {
-		if peer.Info.Address == "" && !peer.IsConnected() {
-			continue
-		}
-		if err := peer.Dial(s); err != nil {
-			slog.Error("broadcast dial:", err)
+		if !peer.IsConnected() {
 			continue
 		}
 		slog.Verbose("broadcast:", name, method, args)
@@ -30,9 +28,13 @@ func (s *Server) broadcast(method string, args interface{}, replyType reflect.Ty
 	}
 	go func() {
 		defer close(chOut)
-		defer close(chIn)
 		for count > 0 {
-			chOut <- <-chIn
+			select {
+			case call := <-chIn:
+				chOut <- call
+			case <-ctx.Done():
+				return
+			}
 			count--
 		}
 	}()
@@ -48,7 +50,12 @@ type RPC struct {
 func (r *RPC) Bootstrap(args *proto.PeerInfo, reply *proto.Cluster) error {
 	slog.Verbosef("RPC.Bootstrap: %v", args)
 	r.peer.Info = *args
-	_ = r.server.broadcast("RPC.Update", args, reflect.TypeOf(proto.None{}))
+	go func() {
+		ctx := util.WithTimeout(r.server.cfg.Timeout())
+		defer util.Cancel(ctx)
+		for range r.server.broadcast(ctx, "RPC.Update", args, reflect.TypeOf(proto.None{})) {
+		}
+	}()
 	r.server.addPeer(r.peer)
 	*reply = *r.server.ClusterInfo()
 	r.server.print()
@@ -58,8 +65,16 @@ func (r *RPC) Bootstrap(args *proto.PeerInfo, reply *proto.Cluster) error {
 
 func (r *RPC) Update(args *proto.PeerInfo, reply *proto.None) error {
 	slog.Verbosef("RPC.Update: %v", args)
-	if r.server.Update(args) {
-		_ = r.server.broadcast("RPC.Update", args, reflect.TypeOf(proto.None{}))
+	if args.PeerName == r.server.LocalPeerName() {
+		return nil
+	}
+	if r.server.Update(*args) {
+		go func() {
+			ctx := util.WithTimeout(r.server.cfg.Timeout())
+			defer util.Cancel(ctx)
+			for range r.server.broadcast(ctx, "RPC.Update", args, reflect.TypeOf(proto.None{})) {
+			}
+		}()
 	}
 	r.server.print()
 	r.router.print()

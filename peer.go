@@ -1,6 +1,7 @@
 package gated
 
 import (
+	"context"
 	"crypto/tls"
 	"net/rpc"
 	"net/rpc/jsonrpc"
@@ -25,36 +26,55 @@ func (p *Peer) IsConnected() bool {
 	return p.Session != nil && !p.Session.IsClosed()
 }
 
+func (p *Peer) CallContext(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error {
+	call := p.rpcClient.Go(serviceMethod, args, reply, nil)
+	select {
+	case <-call.Done:
+		return call.Error
+	case <-ctx.Done():
+		_ = p.Session.Close()
+		return ctx.Err()
+	}
+}
+
 func (p *Peer) Dial(s *Server) error {
 	if p.IsConnected() {
 		return nil
 	}
 	ctx := util.WithTimeout(s.cfg.Timeout())
 	defer util.Cancel(ctx)
-	slog.Verbosef("bootstrap %s: setup connection to %s", p.Info.PeerName, p.Info.Address)
+	slog.Verbosef("bootstrap: setup connection to %s[%s]", p.Info.Address, p.Info.ServerName)
 	tcpConn, err := s.dialer.DialContext(ctx, network, p.Info.Address)
 	if err != nil {
+		slog.Errorf("bootstrap: %v", err)
 		return err
 	}
+	connId := tcpConn.RemoteAddr()
 	tlsConn := tls.Client(tcpConn, s.cfg.TLSConfig(p.Info.ServerName))
 	err = tlsConn.HandshakeContext(ctx)
 	if err != nil {
 		_ = tcpConn.Close()
+		slog.Errorf("bootstrap %v: %v", connId, err)
 		return err
 	}
 	s.cfg.SetConnParams(tcpConn)
 	muxConn, err := yamux.Client(tlsConn, s.cfg.MuxConfig())
 	if err != nil {
 		_ = tlsConn.Close()
+		slog.Errorf("bootstrap %v: %v", connId, err)
 		return err
 	}
 	// TODO: cover in context
 	rpcClientConn, err := muxConn.Open()
 	if err != nil {
+		_ = muxConn.Close()
+		slog.Errorf("bootstrap %v: %v", connId, err)
 		return err
 	}
 	rpcServerConn, err := muxConn.Accept()
 	if err != nil {
+		_ = muxConn.Close()
+		slog.Errorf("bootstrap %v: %v", connId, err)
 		return err
 	}
 	rpcServer := rpc.NewServer()
@@ -71,7 +91,7 @@ func (p *Peer) Dial(s *Server) error {
 		peer:   p,
 	}); err != nil {
 		_ = muxConn.Close()
-		slog.Errorf("bootstrap %s: %v", p.Info.PeerName, err)
+		slog.Errorf("bootstrap %v: %v", connId, err)
 		return err
 	}
 	go func() {
@@ -80,20 +100,21 @@ func (p *Peer) Dial(s *Server) error {
 	}()
 	go func() {
 		err := s.api.Serve(muxConn)
-		slog.Info("session closing:", err)
+		slog.Infof("bootstrap %v: closing %v", connId, err)
 	}()
-	slog.Verbosef("bootstrap %s: join cluster", p.Info.PeerName)
+	slog.Verbosef("bootstrap %v: join cluster", connId)
 	args := s.self()
 	args.Timestamp = NewTimestamp()
 	var reply proto.Cluster
-	err = rpcClient.Call("RPC.Bootstrap", args, &reply)
+	err = p.CallContext(ctx, "RPC.Bootstrap", args, &reply)
 	if err != nil {
+		_ = muxConn.Close()
 		return err
 	}
-	slog.Verbosef("bootstrap %s: reply: %v", p.Info.PeerName, reply)
+	slog.Verbosef("bootstrap %v: reply: %v", connId, reply)
 	p.Info = reply.Self
 	s.Merge(&reply)
-	slog.Debugf("bootstrap %s: ok", p.Info.PeerName)
+	slog.Debugf("bootstrap %v: ok, remote peer: %s", connId, p.Info.PeerName)
 	s.print()
 	s.router.print()
 	return nil

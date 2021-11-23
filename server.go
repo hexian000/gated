@@ -79,7 +79,7 @@ func (s *Server) LocalPeerName() string {
 func (s *Server) Start() error {
 	cfg := s.cfg.Current()
 	if cfg.Listen != "" {
-		slog.Verbose("tls listen:", cfg.Listen)
+		slog.Info("tls listen:", cfg.Listen)
 		l, err := net.Listen(network, cfg.Listen)
 		if err != nil {
 			slog.Error("listen:", err)
@@ -99,7 +99,7 @@ func (s *Server) Start() error {
 		s.addPeer(peer)
 	}
 	if cfg.ProxyListen != "" {
-		slog.Verbose("http listen:", cfg.ProxyListen)
+		slog.Info("http listen:", cfg.ProxyListen)
 		l, err := net.Listen(network, cfg.ProxyListen)
 		if err != nil {
 			slog.Error("listen:", err)
@@ -116,19 +116,13 @@ func (s *Server) Shutdown(ctx context.Context) {
 	panic("TODO")
 }
 
-func (s *Server) Update(info *proto.PeerInfo) bool {
-	if s.merge(info) {
-		s.router.update(info.Hosts, info.PeerName)
-		return true
-	}
-	return false
-}
-
 func (s *Server) FindProxy(peer string) (string, error) {
 	resultCh := make(chan string)
 	go func() {
 		defer close(resultCh)
-		ch := s.broadcast("RPC.Ping", &proto.Ping{
+		ctx := util.WithTimeout(s.cfg.Timeout())
+		defer util.Cancel(ctx)
+		ch := s.broadcast(ctx, "RPC.Ping", &proto.Ping{
 			Timestamp:   time.Now().UnixMilli(),
 			Source:      s.LocalPeerName(),
 			Destination: peer,
@@ -136,7 +130,7 @@ func (s *Server) FindProxy(peer string) (string, error) {
 		}, reflect.TypeOf(proto.Ping{}))
 		for call := range ch {
 			if call.Error != nil {
-				slog.Verbose("ping:", call.Error)
+				slog.Warning("ping:", call.Error)
 				continue
 			}
 			resultCh <- call.Reply.(*proto.Ping).Source
@@ -235,7 +229,7 @@ func (s *Server) serve(tcpConn net.Conn) {
 
 	slog.Verbosef("serve %v: rpc online", connId)
 	rpcServer.ServeCodec(jsonrpc.NewServerCodec(rpcServerConn))
-	slog.Info("serve: closing")
+	slog.Infof("serve %v: closing", connId)
 	_ = muxConn.Close()
 }
 
@@ -287,7 +281,12 @@ func (s *Server) watchdog() {
 				slog.Warning("system hang detected, closing all sessions")
 				s.closeAllSessions()
 			} else if now.Sub(lastSync) > syncInterval {
-				s.broadcast("RPC.Sync", s.ClusterInfo(), reflect.TypeOf(proto.None{}))
+				go func() {
+					ctx := util.WithTimeout(s.cfg.Timeout())
+					defer util.Cancel(ctx)
+					for range s.broadcast(ctx, "RPC.Sync", s.ClusterInfo(), reflect.TypeOf(proto.None{})) {
+					}
+				}()
 				// s.deleteLostPeers()
 				lastSync = now
 			}
@@ -316,7 +315,7 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		for name, peer := range s.peers {
-			w.WriteString(fmt.Sprintf("%s: %v", name, peer.IsConnected()))
+			w.WriteString(fmt.Sprintf("%s: %v\n", name, peer.IsConnected()))
 		}
 	}()
 	_, _ = w.WriteString("\n")

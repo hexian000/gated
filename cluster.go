@@ -60,13 +60,13 @@ func (s *Server) ClusterInfo() *proto.Cluster {
 	}
 }
 
-func (s *Server) merge(info *proto.PeerInfo) bool {
+func (s *Server) merge(info proto.PeerInfo) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if p, ok := s.peers[info.PeerName]; ok {
 		if p.Info.Timestamp < info.Timestamp {
 			slog.Debug("peers merge update:", info)
-			p.Info = *info
+			p.Info = info
 			p.LastSeen = time.Now()
 			return true
 		}
@@ -75,22 +75,30 @@ func (s *Server) merge(info *proto.PeerInfo) bool {
 	slog.Debug("peers merge add:", info)
 	now := time.Now()
 	s.peers[info.PeerName] = &Peer{
-		Info:     *info,
+		Info:     info,
 		Created:  now,
 		LastSeen: now,
 	}
 	return true
 }
 
+func (s *Server) Update(info proto.PeerInfo) bool {
+	if info.PeerName == s.self().PeerName {
+		return false
+	}
+	if s.merge(info) {
+		s.router.update(info.Hosts, info.PeerName)
+		return true
+	}
+	return false
+}
+
 func (s *Server) Merge(data *proto.Cluster) {
-	if s.merge(&data.Self) {
+	if s.merge(data.Self) {
 		s.router.update(data.Self.Hosts, data.Self.PeerName)
 	}
 	for _, info := range data.Peers {
-		info := info
-		if s.merge(&info) {
-			s.router.update(info.Hosts, info.PeerName)
-		}
+		s.Update(info)
 	}
 	s.router.merge(data.Routes)
 }
