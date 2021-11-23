@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/rpc"
 	"net/rpc/jsonrpc"
+	"reflect"
 	"sync"
 	"time"
 
@@ -124,18 +125,25 @@ func (s *Server) Update(info *proto.PeerInfo) bool {
 }
 
 func (s *Server) FindProxy(peer string) (string, error) {
-	ch := s.broadcast("RPC.Ping", &proto.Ping{
-		Timestamp:   time.Now().UnixMilli(),
-		Source:      s.LocalPeerName(),
-		Destination: peer,
-		TTL:         1,
-	}, func() interface{} { return &proto.Ping{} })
-	for call := range ch {
-		if call.Error != nil {
-			slog.Verbose("ping:", call.Error)
-			continue
+	resultCh := make(chan string)
+	go func() {
+		defer close(resultCh)
+		ch := s.broadcast("RPC.Ping", &proto.Ping{
+			Timestamp:   time.Now().UnixMilli(),
+			Source:      s.LocalPeerName(),
+			Destination: peer,
+			TTL:         1,
+		}, reflect.TypeOf(proto.Ping{}))
+		for call := range ch {
+			if call.Error != nil {
+				slog.Verbose("ping:", call.Error)
+				continue
+			}
+			resultCh <- call.Reply.(*proto.Ping).Source
 		}
-		return call.Reply.(*proto.Ping).Source, nil
+	}()
+	if result, ok := <-resultCh; ok {
+		return result, nil
 	}
 	return "", fmt.Errorf("ping: %s is unreachable", peer)
 }
@@ -278,7 +286,7 @@ func (s *Server) watchdog() {
 				slog.Warning("system hang detected, closing all sessions")
 				s.closeAllSessions()
 			} else if now.Sub(lastSync) > syncInterval {
-				s.broadcast("RPC.Sync", s.ClusterInfo(), func() interface{} { return &proto.None{} })
+				s.broadcast("RPC.Sync", s.ClusterInfo(), reflect.TypeOf(proto.None{}))
 				// s.deleteLostPeers()
 				lastSync = now
 			}

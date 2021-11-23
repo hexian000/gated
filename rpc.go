@@ -3,13 +3,14 @@ package gated
 import (
 	"fmt"
 	"net/rpc"
+	"reflect"
 	"time"
 
 	"github.com/hexian000/gated/api/proto"
 	"github.com/hexian000/gated/slog"
 )
 
-func (s *Server) broadcast(method string, args interface{}, reply func() interface{}) <-chan *rpc.Call {
+func (s *Server) broadcast(method string, args interface{}, replyType reflect.Type) <-chan *rpc.Call {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	chIn := make(chan *rpc.Call, 8)
@@ -24,7 +25,7 @@ func (s *Server) broadcast(method string, args interface{}, reply func() interfa
 			continue
 		}
 		slog.Verbose("broadcast:", name, method, args)
-		_ = peer.rpcClient.Go(method, args, reply(), chIn)
+		_ = peer.rpcClient.Go(method, args, reflect.New(replyType).Interface(), chIn)
 		count++
 	}
 	go func() {
@@ -47,7 +48,7 @@ type RPC struct {
 func (r *RPC) Bootstrap(args *proto.PeerInfo, reply *proto.Cluster) error {
 	slog.Verbosef("RPC.Bootstrap: %v", args)
 	r.peer.Info = *args
-	_ = r.server.broadcast("RPC.Update", args, func() interface{} { return &proto.None{} })
+	_ = r.server.broadcast("RPC.Update", args, reflect.TypeOf(proto.None{}))
 	r.server.addPeer(r.peer)
 	*reply = *r.server.ClusterInfo()
 	r.server.print()
@@ -58,7 +59,7 @@ func (r *RPC) Bootstrap(args *proto.PeerInfo, reply *proto.Cluster) error {
 func (r *RPC) Update(args *proto.PeerInfo, reply *proto.None) error {
 	slog.Verbosef("RPC.Update: %v", args)
 	if r.server.Update(args) {
-		_ = r.server.broadcast("RPC.Update", args, func() interface{} { return &proto.None{} })
+		_ = r.server.broadcast("RPC.Update", args, reflect.TypeOf(proto.None{}))
 	}
 	r.server.print()
 	r.router.print()
