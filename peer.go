@@ -31,7 +31,7 @@ func (p *Peer) Dial(s *Server) error {
 	}
 	ctx := util.WithTimeout(s.cfg.Timeout())
 	defer util.Cancel(ctx)
-	slog.Verbose("bootstrap: setup connection to", p.Info.Address)
+	slog.Verbosef("bootstrap %s: setup connection to %s", p.Info.PeerName, p.Info.Address)
 	tcpConn, err := s.dialer.DialContext(ctx, network, p.Info.Address)
 	if err != nil {
 		return err
@@ -71,7 +71,7 @@ func (p *Peer) Dial(s *Server) error {
 		peer:   p,
 	}); err != nil {
 		_ = muxConn.Close()
-		slog.Error("bootstrap:", err)
+		slog.Errorf("bootstrap %s: %v", p.Info.PeerName, err)
 		return err
 	}
 	go func() {
@@ -82,7 +82,7 @@ func (p *Peer) Dial(s *Server) error {
 		err := s.api.Serve(muxConn)
 		slog.Info("session closing:", err)
 	}()
-	slog.Verbose("bootstrap: join cluster")
+	slog.Verbosef("bootstrap %s: join cluster", p.Info.PeerName)
 	args := s.self()
 	args.Timestamp = NewTimestamp()
 	var reply proto.Cluster
@@ -90,10 +90,10 @@ func (p *Peer) Dial(s *Server) error {
 	if err != nil {
 		return err
 	}
-	slog.Debugf("bootstrap: reply: %v", reply)
+	slog.Verbosef("bootstrap %s: reply: %v", p.Info.PeerName, reply)
 	p.Info = reply.Self
 	s.Merge(&reply)
-	slog.Verbose("bootstrap: ok")
+	slog.Debugf("bootstrap %s: ok", p.Info.PeerName)
 	s.print()
 	s.router.print()
 	return nil

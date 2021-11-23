@@ -182,30 +182,31 @@ func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, er
 }
 
 func (s *Server) serve(tcpConn net.Conn) {
+	connId := tcpConn.RemoteAddr()
 	ctx := util.WithTimeout(s.cfg.Timeout())
 	defer util.Cancel(ctx)
-	slog.Verbose("serve: setup connection")
+	slog.Verbosef("serve %v: setup connection", connId)
 	tlsConn := tls.Server(tcpConn, s.cfg.tls)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		_ = tcpConn.Close()
-		slog.Error("serve:", err)
+		slog.Errorf("serve %v: %v", connId, err)
 		return
 	}
 	s.cfg.SetConnParams(tcpConn)
 	muxConn, err := yamux.Server(tlsConn, s.cfg.MuxConfig())
 	if err != nil {
 		_ = tlsConn.Close()
-		slog.Error("serve:", err)
+		slog.Errorf("serve %v: %v", connId, err)
 		return
 	}
 	rpcClientConn, err := muxConn.Open()
 	if err != nil {
-		slog.Error("serve:", err)
+		slog.Errorf("serve %v: %v", connId, err)
 		return
 	}
 	rpcServerConn, err := muxConn.Accept()
 	if err != nil {
-		slog.Error("serve:", err)
+		slog.Errorf("serve %v: %v", connId, err)
 		return
 	}
 	rpcServer := rpc.NewServer()
@@ -224,15 +225,15 @@ func (s *Server) serve(tcpConn net.Conn) {
 		peer:   p,
 	}); err != nil {
 		_ = muxConn.Close()
-		slog.Error("serve:", err)
+		slog.Errorf("serve %v: %v", connId, err)
 		return
 	}
 	go func() {
 		err := s.api.Serve(muxConn)
-		slog.Info("serve: closing:", err)
+		slog.Errorf("serve %v: closing: %v", connId, err)
 	}()
 
-	slog.Verbose("serve: rpc online")
+	slog.Verbosef("serve %v: rpc online", connId)
 	rpcServer.ServeCodec(jsonrpc.NewServerCodec(rpcServerConn))
 	slog.Info("serve: closing")
 	_ = muxConn.Close()

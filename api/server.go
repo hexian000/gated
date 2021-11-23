@@ -86,15 +86,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	apiDomain := s.GetAPIDomain()
 
 	if hostname == "" || strings.EqualFold(hostname, apiDomain) {
-		slog.Verbose("== url:", req.URL)
+		slog.Verbose("local api:", req.URL)
 		s.mux.ServeHTTP(w, req)
 		return
 	} else if peer, ok := util.StripDomain(hostname, apiDomain); ok && peer == s.peers.LocalPeerName() {
-		slog.Verbose("== url:", req.URL)
+		slog.Verbose("local peer api:", req.URL)
 		s.mux.ServeHTTP(w, req)
 		return
 	} else if ok {
-		slog.Verbose("== url2:", req.URL)
+		slog.Verbose("routed api:", req.URL)
 		client := s.apiClient(peer)
 		s.proxy(client, w, req)
 		return
