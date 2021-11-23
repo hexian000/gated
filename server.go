@@ -174,7 +174,7 @@ func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, er
 		slog.Debug("find proxy:", err)
 		return nil, err
 	}
-	slog.Debug("dial peer via", proxy)
+	slog.Debugf("dial peer %s via %s", peer, proxy)
 	return s.dialPeer(proxy)
 }
 

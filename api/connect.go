@@ -13,9 +13,9 @@ import (
 func (s *Server) gatewayError(w http.ResponseWriter, err error) {
 	if err, ok := err.(net.Error); ok && err.Timeout() {
 		s.webError(w, err.Error(), http.StatusGatewayTimeout)
-	} else {
-		s.webError(w, err.Error(), http.StatusBadGateway)
+		return
 	}
+	s.webError(w, err.Error(), http.StatusBadGateway)
 }
 
 func (s *Server) ServeConnect(w http.ResponseWriter, req *http.Request) {
@@ -49,6 +49,7 @@ func (s *Server) ServeConnect(w http.ResponseWriter, req *http.Request) {
 		conn := proxy.Client(dialed, req.Host)
 		err = conn.HandshakeContext(ctx)
 		if err != nil {
+			slog.Warning("http connect:", err)
 			s.gatewayError(w, err)
 			return
 		}
