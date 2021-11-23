@@ -26,7 +26,10 @@ type Router struct {
 	server *Server
 }
 
-const routeHost = "route.gated"
+const (
+	apiHost   = "api.gated"
+	routeHost = "route.gated"
+)
 
 func NewRouter(domain string, defaultPeer string, server *Server, hosts map[string]string) *Router {
 	r := &Router{
@@ -45,14 +48,14 @@ func NewRouter(domain string, defaultPeer string, server *Server, hosts map[stri
 	return r
 }
 
-func (r *Router) GetRouteHost(peer string) string {
+func (r *Router) GetRouteDomain(peer string) string {
 	return peer + "." + r.domain
 }
 
 func (r *Router) makeURL(peer string) *url.URL {
 	return &url.URL{
 		Scheme: "http",
-		Host:   r.GetRouteHost(peer),
+		Host:   r.GetRouteDomain(peer),
 	}
 }
 
@@ -99,10 +102,6 @@ func (r *Router) Resolve(host string) (*url.URL, error) {
 	}
 	if peer, ok := r.routes[host]; ok {
 		// routed
-		peer, err := r.server.FindProxy(peer)
-		if err != nil {
-			return nil, err
-		}
 		slog.Debug("router resolve:", host, "via", peer)
 		return r.makeURL(peer), nil
 	}

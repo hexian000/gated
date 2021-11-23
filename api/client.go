@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/hexian000/gated/slog"
@@ -63,6 +64,12 @@ func (s *Server) proxy(client *http.Client, w http.ResponseWriter, req *http.Req
 func (s *Server) apiClient(peer string) *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
+			Proxy: func(r *http.Request) (*url.URL, error) {
+				return &url.URL{
+					Scheme: "http",
+					Host:   peer + "." + s.GetAPIDomain(),
+				}, nil
+			},
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return s.peers.DialPeerContext(ctx, peer)
 			},

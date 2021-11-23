@@ -82,7 +82,7 @@ func (p *Peer) Dial(s *Server) error {
 		err := s.api.Serve(muxConn)
 		slog.Info("session closing:", err)
 	}()
-	slog.Verbose("bootstrap: rpc roundtripping")
+	slog.Verbose("bootstrap: join cluster")
 	args := s.self()
 	args.Timestamp = NewTimestamp()
 	var reply proto.Cluster

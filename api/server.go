@@ -11,6 +11,7 @@ import (
 
 	"github.com/hexian000/gated/api/proxy"
 	"github.com/hexian000/gated/metric"
+	"github.com/hexian000/gated/slog"
 	"github.com/hexian000/gated/util"
 )
 
@@ -72,10 +73,6 @@ func New(cfg *Config) *Server {
 	return s
 }
 
-func (s *Server) GetHost() string {
-	return s.cfg.Name /* + "." + s.cfg.Domain */
-}
-
 func (s *Server) GetAPIDomain() string {
 	return apiHost + "." + s.cfg.Domain
 }
@@ -88,15 +85,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	hostname := req.URL.Hostname()
 	apiDomain := s.GetAPIDomain()
 
-	if peer, ok := util.StripDomain(hostname, apiDomain); hostname == "" ||
-		strings.EqualFold(hostname, apiDomain) || (ok && peer == s.peers.LocalPeerName()) {
-		if s.mux != nil {
-			s.mux.ServeHTTP(w, req)
-		} else {
-			w.WriteHeader(http.StatusNotFound)
-		}
+	if hostname == "" || strings.EqualFold(hostname, apiDomain) {
+		slog.Verbose("== url:", req.URL)
+		s.mux.ServeHTTP(w, req)
+		return
+	} else if peer, ok := util.StripDomain(hostname, apiDomain); ok && peer == s.peers.LocalPeerName() {
+		slog.Verbose("== url:", req.URL)
+		s.mux.ServeHTTP(w, req)
 		return
 	} else if ok {
+		slog.Verbose("== url2:", req.URL)
 		client := s.apiClient(peer)
 		s.proxy(client, w, req)
 		return

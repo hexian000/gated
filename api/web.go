@@ -10,7 +10,7 @@ import (
 )
 
 func (s *Server) webError(w http.ResponseWriter, msg string, code int) {
-	http.Error(w, version.WebBanner(s.GetHost())+msg, code)
+	http.Error(w, version.WebBanner(s.peers.LocalPeerName())+msg, code)
 }
 
 func (s *Server) handleStatus(respWriter http.ResponseWriter, req *http.Request) {
@@ -26,7 +26,7 @@ func (s *Server) handleStatus(respWriter http.ResponseWriter, req *http.Request)
 	defer func() {
 		_ = w.Flush()
 	}()
-	_, _ = w.WriteString(version.WebBanner(s.GetHost()))
+	_, _ = w.WriteString(version.WebBanner(s.peers.LocalPeerName()))
 	s.metric.CollectMetrics(w)
 	_, _ = w.WriteString("\n==========\n")
 	_, _ = w.WriteString(fmt.Sprintln("Generated in", time.Since(start)))
@@ -44,7 +44,7 @@ func (s *Server) handleCluster(respWriter http.ResponseWriter, req *http.Request
 	defer func() {
 		_ = w.Flush()
 	}()
-	_, _ = w.WriteString(version.WebBanner(s.GetHost()))
+	_, _ = w.WriteString(version.WebBanner(s.peers.LocalPeerName()))
 	// for name := range h.Server.dials {
 	// 	_, _ = w.WriteString(fmt.Sprintf("remote: %s\n", name))
 	// }

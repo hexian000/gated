@@ -145,23 +145,37 @@ func (s *Server) FindProxy(peer string) (string, error) {
 	return "", fmt.Errorf("ping: %s is unreachable", peer)
 }
 
-func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, error) {
+func (s *Server) dialPeer(peer string) (net.Conn, error) {
 	p := s.getPeer(peer)
 	if p == nil {
 		return nil, fmt.Errorf("unknown peer: %s", peer)
 	}
-
 	if p.Session != nil && !p.Session.IsClosed() {
 		return p.Session.Open()
 	}
-
-	if p.Info.Address != "" {
-		if err := p.Dial(s); err != nil {
-			return nil, err
-		}
-		return p.Session.Open()
+	if p.Info.Address == "" {
+		return nil, fmt.Errorf("peer %s has no address", peer)
 	}
-	return nil, nil
+	if err := p.Dial(s); err != nil {
+		return nil, err
+	}
+	return p.Session.Open()
+
+}
+
+func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, error) {
+	conn, err := s.dialPeer(peer)
+	if err == nil {
+		return conn, nil
+	}
+	slog.Debug("dial peer:", err)
+	proxy, err := s.FindProxy(peer)
+	if err != nil {
+		slog.Debug("find proxy:", err)
+		return nil, err
+	}
+	slog.Debug("dial peer via", proxy)
+	return s.dialPeer(proxy)
 }
 
 func (s *Server) serve(tcpConn net.Conn) {
