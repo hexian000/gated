@@ -124,11 +124,6 @@ func (s *Server) Update(info *proto.PeerInfo) bool {
 }
 
 func (s *Server) FindProxy(peer string) (string, error) {
-	if p := s.getPeer(peer); p != nil {
-		if p.Info.Address != "" {
-			return peer, nil
-		}
-	}
 	ch := s.broadcast("RPC.Ping", &proto.Ping{
 		Timestamp:   time.Now().UnixMilli(),
 		Source:      s.LocalPeerName(),

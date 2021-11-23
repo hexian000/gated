@@ -31,7 +31,7 @@ func (p *Peer) Dial(s *Server) error {
 	}
 	ctx := util.WithTimeout(s.cfg.Timeout())
 	defer util.Cancel(ctx)
-	slog.Verbose("bootstrap: setup connection")
+	slog.Verbose("bootstrap: setup connection to", p.Info.Address)
 	tcpConn, err := s.dialer.DialContext(ctx, network, p.Info.Address)
 	if err != nil {
 		return err
