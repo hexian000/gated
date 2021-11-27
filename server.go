@@ -79,26 +79,46 @@ func (s *Server) LocalPeerName() string {
 	return s.cfg.Current().Name
 }
 
-func (s *Server) bootstrap(addr, sni string) {
-	p := newPeer(s)
-	p.info.Address = addr
-	p.info.ServerName = sni
-	s.dialPeer(p)
-}
-
-func (s *Server) dialPeer(p *peer) {
-	ctx, cancel := context.WithTimeout(context.Background(), s.cfg.Timeout())
-	defer cancel()
-	cluster, err := p.Bootstrap(ctx, s)
+func (s *Server) dialPeer(ctx context.Context, p *peer) error {
+	cluster, err := p.Bootstrap(ctx)
 	if err != nil {
-		slog.Errorf("bootstrap %s: %v", p.info.Address, err)
-		return
+		return err
 	}
 	s.addPeer(p)
 	s.MergeCluster(cluster)
 	slog.Verbosef("bootstrap %s[%s]: ok", p.info.Address, p.info.PeerName)
 	s.print()
 	s.router.print()
+	return nil
+}
+
+func (s *Server) openPeer(p *peer) (net.Conn, error) {
+	if !p.isConnected() {
+		if !p.isReachable() {
+			return nil, fmt.Errorf("peer %q didn't advertise an address", p.info.PeerName)
+		}
+		if err := func() error {
+			ctx := s.canceller.WithTimeout(s.cfg.Timeout())
+			defer s.canceller.Cancel(ctx)
+			return s.dialPeer(ctx, p)
+
+		}(); err != nil {
+			return nil, err
+		}
+	}
+	return p.Open()
+}
+
+func (s *Server) bootstrap(addr, sni string) {
+	p := newPeer(s)
+	p.info.Address = addr
+	p.info.ServerName = sni
+	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
+	defer s.canceller.Cancel(ctx)
+	if err := s.dialPeer(ctx, p); err != nil {
+		slog.Errorf("bootstrap %s: %v", addr, err)
+		return
+	}
 }
 
 func (s *Server) Start() error {
@@ -157,7 +177,7 @@ func (s *Server) FindProxy(peer string) (string, error) {
 
 func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, error) {
 	p := s.getPeer(peer)
-	conn, err := p.DialContext(ctx)
+	conn, err := s.openPeer(p)
 	if err == nil {
 		return conn, nil
 	}
@@ -169,7 +189,7 @@ func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, er
 	}
 	slog.Debugf("dial peer %s via %s", peer, proxy)
 	p = s.getPeer(proxy)
-	return p.DialContext(ctx)
+	return s.openPeer(p)
 }
 
 func (s *Server) serve(tcpConn net.Conn) {
@@ -191,7 +211,7 @@ func (s *Server) serve(tcpConn net.Conn) {
 		return
 	}
 	p := newPeer(s)
-	p.Serve(s, muxConn)
+	p.Serve(muxConn)
 }
 
 func (s *Server) closeAllSessions() {
@@ -215,7 +235,13 @@ func (s *Server) maintenance() {
 			p.checkNumStreams()
 		} else if needRedial {
 			slog.Infof("redial: %s", p.info.PeerName)
-			go s.dialPeer(p)
+			go func() {
+				ctx := s.canceller.WithTimeout(s.cfg.Timeout())
+				defer s.canceller.Cancel(ctx)
+				if err := s.dialPeer(ctx, p); err != nil {
+					slog.Errorf("redial %s: %v", p.info.PeerName, err)
+				}
+			}()
 		}
 		if time.Since(p.lastSeen) > idleTimeout {
 			slog.Infof("idle timeout expired: %s", p.info.PeerName)
@@ -227,18 +253,22 @@ func (s *Server) maintenance() {
 func (s *Server) sync() {
 	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 	defer s.canceller.Cancel(ctx)
-	err := s.gossip(ctx, "RPC.Sync", s.ClusterInfo(), reflect.TypeOf(proto.Cluster{}))
+	var cluster proto.Cluster
+	err := s.gossip(ctx, "RPC.Sync", s.ClusterInfo(), &cluster)
 	if err != nil {
 		slog.Warning("gossip:", err)
 	}
+	s.MergeCluster(&cluster)
+	s.print()
+	slog.Debug("sync finished with", cluster.Self.PeerName)
 }
 
 func (s *Server) watchdog() {
 	const (
-		hangCheckInterval = 1 * time.Minute
-		syncInterval      = 2 * time.Hour
+		tickInterval = 1 * time.Minute
+		syncInterval = 2 * time.Hour
 	)
-	ticker := time.NewTicker(hangCheckInterval)
+	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
 	last := time.Now()
 	lastSync := last
@@ -246,7 +276,7 @@ func (s *Server) watchdog() {
 		select {
 		case <-ticker.C:
 			now := time.Now()
-			if now.Sub(last) > 2*hangCheckInterval {
+			if now.Sub(last) > 2*tickInterval {
 				slog.Warning("system hang detected, closing all sessions")
 				s.closeAllSessions()
 			} else if now.Sub(lastSync) > syncInterval {

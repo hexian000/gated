@@ -17,7 +17,7 @@ import (
 )
 
 func (p *peer) call(ctx context.Context, method string, args interface{}, reply interface{}) error {
-	c, err := p.DialContext(ctx)
+	c, err := p.Open()
 	if err != nil {
 		slog.Debug("rpc call:", err)
 		return err
@@ -55,7 +55,7 @@ func (s *Server) gossip(ctx context.Context, method string, args interface{}, re
 		defer s.mu.RUnlock()
 		set := make([]*peer, 0)
 		for _, p := range s.peers {
-			if p.isConnected() {
+			if p.isReachable() || p.isConnected() {
 				set = append(set, p)
 			}
 		}
@@ -66,6 +66,11 @@ func (s *Server) gossip(ctx context.Context, method string, args interface{}, re
 	}()
 	if p == nil {
 		return errors.New("no connected peer")
+	}
+	if !p.isConnected() {
+		if err := s.dialPeer(ctx, p); err != nil {
+			return err
+		}
 	}
 	return p.call(ctx, method, args, reply)
 }
