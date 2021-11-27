@@ -211,8 +211,9 @@ func (s *Server) closeAllSessions() {
 }
 
 func (s *Server) maintenance() {
-	needRedial := s.cfg.Current().AdvertiseAddr == ""
-	idleTimeout := time.Duration(s.cfg.Current().Transport.IdleTimeout) * time.Second
+	cfg := s.cfg.Current()
+	needRedial := cfg.AdvertiseAddr == ""
+	idleTimeout := time.Duration(cfg.Transport.IdleTimeout) * time.Second
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for name, p := range s.peers {
@@ -222,14 +223,14 @@ func (s *Server) maintenance() {
 		if p.isConnected() {
 			p.checkNumStreams()
 		} else if needRedial {
-			slog.Infof("redial: %s", p.info.PeerName)
-			go func() {
+			slog.Infof("redial %q: %q", p.info.PeerName, p.info.Address)
+			go func(p *peer) {
 				ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 				defer s.canceller.Cancel(ctx)
 				if err := s.bootstrap(ctx, p); err != nil {
-					slog.Errorf("redial %s: %v", p.info.PeerName, err)
+					slog.Errorf("redial %q: %v", p.info.PeerName, err)
 				}
-			}()
+			}(p)
 		}
 		if time.Since(p.lastSeen) > idleTimeout {
 			slog.Infof("idle timeout expired: %s", p.info.PeerName)

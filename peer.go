@@ -173,6 +173,7 @@ func (p *peer) Dial(ctx context.Context) (*proto.Cluster, error) {
 		return nil, err
 	}
 	slog.Verbosef("bootstrap %v: reply: %v", connId, cluster)
+	p.lastSeen = time.Now()
 	p.info = cluster.Self
 	slog.Infof("bootstrap %v: ok, remote peer: %s", connId, p.info.PeerName)
 	return &cluster, nil
