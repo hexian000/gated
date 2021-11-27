@@ -80,17 +80,23 @@ func (s *Server) LocalPeerName() string {
 }
 
 func (s *Server) bootstrap(addr, sni string) {
+	p := newPeer(s)
+	p.info.Address = addr
+	p.info.ServerName = sni
+	s.dialPeer(p)
+}
+
+func (s *Server) dialPeer(p *peer) {
 	ctx, cancel := context.WithTimeout(context.Background(), s.cfg.Timeout())
 	defer cancel()
-	peer := newPeer(s)
-	cluster, err := peer.Bootstrap(ctx, s, addr, sni)
+	cluster, err := p.Bootstrap(ctx, s)
 	if err != nil {
-		slog.Errorf("bootstrap %s: %v", addr, err)
+		slog.Errorf("bootstrap %s: %v", p.info.Address, err)
 		return
 	}
-	s.addPeer(peer)
+	s.addPeer(p)
 	s.MergeCluster(cluster)
-	slog.Verbosef("bootstrap %s[%s]: ok", addr, peer.info.PeerName)
+	slog.Verbosef("bootstrap %s[%s]: ok", p.info.Address, p.info.PeerName)
 	s.print()
 	s.router.print()
 }
@@ -196,13 +202,34 @@ func (s *Server) closeAllSessions() {
 	}
 }
 
-func (s *Server) redial() {
+func (s *Server) maintenance() {
+	needRedial := s.cfg.Current().AdvertiseAddr == ""
+	idleTimeout := time.Duration(s.cfg.Current().Transport.IdleTimeout) * time.Second
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, p := range s.peers {
-		if p.isReachable() && !p.isConnected() {
-			go s.bootstrap(p.info.Address, p.info.ServerName)
+		if !p.isReachable() {
+			continue
 		}
+		if p.isConnected() {
+			p.checkNumStreams()
+		} else if needRedial {
+			slog.Infof("redial: %s", p.info.PeerName)
+			go s.dialPeer(p)
+		}
+		if time.Since(p.lastSeen) > idleTimeout {
+			slog.Infof("idle timeout expired: %s", p.info.PeerName)
+			_ = p.Close()
+		}
+	}
+}
+
+func (s *Server) sync() {
+	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
+	defer s.canceller.Cancel(ctx)
+	err := s.gossip(ctx, "RPC.Sync", s.ClusterInfo(), reflect.TypeOf(proto.Cluster{}))
+	if err != nil {
+		slog.Warning("gossip:", err)
 	}
 }
 
@@ -223,14 +250,11 @@ func (s *Server) watchdog() {
 				slog.Warning("system hang detected, closing all sessions")
 				s.closeAllSessions()
 			} else if now.Sub(lastSync) > syncInterval {
-				_ = s.broadcast("RPC.Sync", s.ClusterInfo(), reflect.TypeOf(proto.None{}))
-				// s.deleteLostPeers()
+				s.sync()
 				lastSync = now
 			}
 			last = now
-			if s.cfg.Current().AdvertiseAddr == "" {
-				s.redial()
-			}
+			s.maintenance()
 		case <-s.shutdownCh:
 			return
 		}

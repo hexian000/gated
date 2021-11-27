@@ -22,23 +22,17 @@ type peer struct {
 	created  time.Time
 	lastSeen time.Time
 
-	cfg        *Config
-	resolver   Resolver
-	apiHandler http.Handler
-	apiServer  *http.Server
-	apiClient  *http.Client
-}
-
-func (p *peer) seen() {
-	p.lastSeen = time.Now()
+	cfg       *Config
+	resolver  Resolver
+	apiServer *http.Server
+	apiClient *http.Client
 }
 
 func newPeer(s *Server) *peer {
 	return &peer{
-		created:    time.Now(),
-		cfg:        s.cfg,
-		resolver:   s.router,
-		apiHandler: s.handler,
+		created:  time.Now(),
+		cfg:      s.cfg,
+		resolver: s.router,
 	}
 }
 
@@ -52,6 +46,17 @@ func (p *peer) isConnected() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.mux != nil && !p.mux.IsClosed()
+}
+
+func (p *peer) checkNumStreams() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.mux == nil || p.mux.IsClosed() {
+		return
+	}
+	if p.mux.NumStreams() > 0 {
+		p.lastSeen = time.Now()
+	}
 }
 
 func (p *peer) dialMux(ctx context.Context, addr, sni string) (*yamux.Session, error) {
@@ -80,29 +85,37 @@ func (p *peer) dialMux(ctx context.Context, addr, sni string) (*yamux.Session, e
 	return muxConn, nil
 }
 
-func (p *peer) open() (net.Conn, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+func (p *peer) Open() (net.Conn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if p.mux == nil {
 		return nil, fmt.Errorf("peer %s is not connected", p.info.PeerName)
 	}
-	return p.mux.Open()
+	conn, err := p.mux.Open()
+	if err == nil {
+		p.lastSeen = time.Now()
+	}
+	return conn, err
 }
 
 func (p *peer) DialContext(ctx context.Context) (net.Conn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.info.Address == "" {
-		return nil, fmt.Errorf("peer %s didn't advertise an address", p.info.PeerName)
-	}
 	if p.mux == nil || p.mux.IsClosed() {
+		if p.info.Address == "" {
+			return nil, fmt.Errorf("peer %s didn't advertise an address", p.info.PeerName)
+		}
 		mux, err := p.dialMux(ctx, p.info.Address, p.info.ServerName)
 		if err != nil {
 			return nil, err
 		}
 		p.mux = mux
 	}
-	return p.mux.Open()
+	conn, err := p.mux.Open()
+	if err == nil {
+		p.lastSeen = time.Now()
+	}
+	return conn, err
 }
 
 func (p *peer) newHandler(s *Server) http.Handler {
@@ -144,11 +157,15 @@ func (p *peer) Serve(s *Server, mux *yamux.Session) {
 	_ = p.apiServer.Serve(p.mux)
 }
 
-func (p *peer) Bootstrap(ctx context.Context, s *Server, addr, sni string) (*proto.Cluster, error) {
+func (p *peer) Bootstrap(ctx context.Context, s *Server) (*proto.Cluster, error) {
+	var addr, sni string
 	func() {
 		p.mu.Lock()
 		defer p.mu.Unlock()
-		p.info.Address, p.info.ServerName = addr, sni
+		addr, sni = p.info.Address, p.info.ServerName
+		if p.mux != nil {
+			_ = p.mux.Close()
+		}
 	}()
 	mux, err := p.dialMux(ctx, addr, sni)
 	if err != nil {

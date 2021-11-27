@@ -3,7 +3,9 @@ package gated
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"net/rpc"
 	"net/url"
@@ -15,7 +17,7 @@ import (
 )
 
 func (p *peer) call(ctx context.Context, method string, args interface{}, reply interface{}) error {
-	c, err := p.open()
+	c, err := p.DialContext(ctx)
 	if err != nil {
 		slog.Debug("rpc call:", err)
 		return err
@@ -47,6 +49,27 @@ func (p *peer) call(ctx context.Context, method string, args interface{}, reply 
 	return client.Call(method, args, reply)
 }
 
+func (s *Server) gossip(ctx context.Context, method string, args interface{}, reply interface{}) error {
+	p := func() *peer {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		set := make([]*peer, 0)
+		for _, p := range s.peers {
+			if p.isConnected() {
+				set = append(set, p)
+			}
+		}
+		if len(set) < 1 {
+			return nil
+		}
+		return set[rand.Intn(len(set))]
+	}()
+	if p == nil {
+		return errors.New("no connected peer")
+	}
+	return p.call(ctx, method, args, reply)
+}
+
 type rpcResult struct {
 	reply interface{}
 	err   error
@@ -58,6 +81,9 @@ func (s *Server) broadcast(method string, args interface{}, replyType reflect.Ty
 	wg := sync.WaitGroup{}
 	ch := make(chan rpcResult, 10)
 	for name, p := range s.peers {
+		if !p.isConnected() {
+			continue
+		}
 		slog.Verbosef("broadcast %s: %s %v", name, method, args)
 		wg.Add(1)
 		go func(name string, p *peer) {
@@ -111,9 +137,10 @@ func (r *RPC) Update(args *proto.PeerInfo, reply *proto.None) error {
 	return nil
 }
 
-func (r *RPC) Sync(args *proto.Cluster, reply *proto.None) error {
+func (r *RPC) Sync(args *proto.Cluster, reply *proto.Cluster) error {
 	slog.Verbosef("RPC.Sync: %v", args)
 	r.server.MergeCluster(args)
+	*reply = *r.server.ClusterInfo()
 	r.server.print()
 	r.router.print()
 	return nil
@@ -139,7 +166,7 @@ func (r *RPC) Ping(args *proto.Ping, reply *proto.Ping) error {
 	}
 	ctx := r.server.canceller.WithTimeout(r.peer.cfg.Timeout())
 	defer r.server.canceller.Cancel(ctx)
-	if err := peer.call(ctx, "RPC.Ping", args, reply); err != nil {
+	if err := peer.call(ctx, "RPC.Ping", args, &proto.Ping{}); err != nil {
 		return err
 	}
 	return nil

@@ -17,6 +17,7 @@ type Transport struct {
 	KeepAliveInterval int    `json:"keepalive"`
 	Timeout           int    `json:"timeout"`
 	WriteTimeout      int    `json:"writetimeout"`
+	IdleTimeout       int    `json:"idletimeout"`
 	StreamWindow      uint32 `json:"window"`
 }
 
@@ -52,6 +53,7 @@ func New() *Main {
 			KeepAliveInterval: 15,
 			Timeout:           15,
 			WriteTimeout:      15,
+			IdleTimeout:       15 * 60,
 			StreamWindow:      256 * 1024,
 		},
 	}
