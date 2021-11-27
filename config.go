@@ -4,14 +4,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
-	"log"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/yamux"
 	"github.com/hexian000/gated/config"
-	"github.com/hexian000/gated/slog"
 )
 
 type Config struct {
@@ -73,7 +71,7 @@ func (c *Config) Load(cfg *config.Main) error {
 		MaxStreamWindowSize:    cfg.Transport.StreamWindow,
 		StreamOpenTimeout:      timeout,
 		StreamCloseTimeout:     timeout,
-		Logger:                 log.New(&logWrapper{slog.Default()}, "", 0),
+		Logger:                 newYamuxLogger(),
 	}
 	if err = yamux.VerifyConfig(muxCfg); err != nil {
 		return err
@@ -122,4 +120,8 @@ func (c *Config) Current() *config.Main {
 
 func (c *Config) Timeout() time.Duration {
 	return time.Duration(c.Current().Timeout) * time.Second
+}
+
+func (c *Config) GetFQDN(host string) string {
+	return host + "." + c.Current().Domain
 }

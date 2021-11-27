@@ -3,17 +3,22 @@ package gated
 import (
 	"time"
 
-	"github.com/hexian000/gated/api/proto"
+	"github.com/hexian000/gated/proto"
 	"github.com/hexian000/gated/slog"
 )
 
-func (s *Server) self() proto.PeerInfo {
+func NewTimestamp() int64 {
+	return time.Now().UnixMilli()
+}
+
+func (s *Server) self() *proto.PeerInfo {
 	cfg := s.cfg.Current()
 	hosts := []string(nil)
 	for host := range cfg.Hosts {
 		hosts = append(hosts, host)
 	}
-	return proto.PeerInfo{
+	return &proto.PeerInfo{
+		Timestamp:  NewTimestamp(),
 		PeerName:   cfg.Name,
 		ServerName: cfg.ServerName,
 		Address:    cfg.AdvertiseAddr,
@@ -21,86 +26,81 @@ func (s *Server) self() proto.PeerInfo {
 	}
 }
 
-func (s *Server) getPeer(name string) *Peer {
+func (s *Server) getPeer(name string) *peer {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.peers[name]
 }
 
-func (s *Server) addPeer(peer *Peer) {
-	name := peer.Info.PeerName
+func (s *Server) addPeer(peer *peer) {
+	name := peer.info.PeerName
 	func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		if peer, ok := s.peers[name]; ok && peer.Session != nil {
-			_ = peer.Session.Close()
+		if p, ok := s.peers[name]; ok {
+			_ = p.Close()
 		}
 		s.peers[name] = peer
 	}()
-	s.router.update(peer.Info.Hosts, name)
+	s.router.update(peer.info.Hosts, name)
 }
 
 func (s *Server) Peers() map[string]proto.PeerInfo {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	peers := make(map[string]proto.PeerInfo)
-	for host, peer := range s.peers {
-		if peer.Info.Address != "" {
-			peers[host] = peer.Info
-		}
+	for name, peer := range s.peers {
+		peers[name] = peer.info
 	}
 	return peers
 }
 
 func (s *Server) ClusterInfo() *proto.Cluster {
 	return &proto.Cluster{
-		Self:   s.self(),
+		Self:   *s.self(),
 		Peers:  s.Peers(),
 		Routes: s.router.Routes(),
 	}
 }
 
-func (s *Server) merge(info proto.PeerInfo) bool {
+func (s *Server) updatePeerInfo(info *proto.PeerInfo) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if p, ok := s.peers[info.PeerName]; ok {
-		if p.Info.Timestamp < info.Timestamp {
-			slog.Debug("peers merge update:", info)
-			p.Info = info
-			p.LastSeen = time.Now()
+		if p.info.Timestamp < info.Timestamp {
+			slog.Debug("peer info update:", info)
+			p.info = *info
 			return true
 		}
 		return false
 	}
-	slog.Debug("peers merge add:", info)
-	now := time.Now()
-	s.peers[info.PeerName] = &Peer{
-		Info:     info,
-		Created:  now,
-		LastSeen: now,
+	slog.Debug("peer info add:", info)
+	s.peers[info.PeerName] = &peer{
+		info:    *info,
+		created: time.Now(),
 	}
 	return true
 }
 
-func (s *Server) Update(info proto.PeerInfo) bool {
-	if info.PeerName == s.self().PeerName {
+func (s *Server) Update(info *proto.PeerInfo) bool {
+	if info.PeerName == s.LocalPeerName() {
 		return false
 	}
-	if s.merge(info) {
+	if s.updatePeerInfo(info) {
 		s.router.update(info.Hosts, info.PeerName)
 		return true
 	}
 	return false
 }
 
-func (s *Server) Merge(data *proto.Cluster) {
-	if s.merge(data.Self) {
-		s.router.update(data.Self.Hosts, data.Self.PeerName)
+func (s *Server) MergeCluster(cluster *proto.Cluster) {
+	if s.Update(&cluster.Self) {
+		s.router.update(cluster.Self.Hosts, cluster.Self.PeerName)
 	}
-	for _, info := range data.Peers {
-		s.Update(info)
+	for _, info := range cluster.Peers {
+		s.Update(&info)
 	}
-	s.router.merge(data.Routes)
+	s.router.merge(cluster.Routes)
 }
 
 func (s *Server) print() {

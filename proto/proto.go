@@ -16,7 +16,6 @@ type Cluster struct {
 }
 
 type Ping struct {
-	Timestamp   int64  `json:"timestamp"`
 	Source      string `json:"source"`
 	Destination string `json:"dest"`
 	TTL         int    `json:"ttl,omitempty"`

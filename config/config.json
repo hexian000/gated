@@ -2,7 +2,7 @@
     "name": "server",
     "listen": ":50100",
     "addr": "127.0.0.1:50100",
-    "proxylisten": "127.0.0.1:8080",
+    "httplisten": "127.0.0.1:8080",
     "hosts": {
         "server.lan": "127.0.0.1"
     },

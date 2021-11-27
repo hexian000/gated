@@ -30,7 +30,7 @@ type Main struct {
 	Domain        string            `json:"vdomain"`
 	ServerName    string            `json:"sni"`
 	Listen        string            `json:"listen"`
-	ProxyListen   string            `json:"proxylisten"`
+	HTTPListen    string            `json:"httplisten"`
 	AdvertiseAddr string            `json:"addr"`
 	Servers       []Server          `json:"servers"`
 	Hosts         map[string]string `json:"hosts"`

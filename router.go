@@ -2,7 +2,6 @@ package gated
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -19,12 +18,20 @@ type Router struct {
 	routes map[string]string // map[host]peer
 	hosts  map[string]string // map[host]addr
 
-	domain       string
+	apiDomain    string
+	routeDomain  string
 	defaultProxy *url.URL
 
 	dialer net.Dialer
 	server *Server
 }
+
+type Resolver interface {
+	Resolve(host string) (*url.URL, error)
+	Proxy(req *http.Request) (*url.URL, error)
+}
+
+var _ = Resolver(&Router{})
 
 const (
 	apiHost   = "api.gated"
@@ -33,10 +40,11 @@ const (
 
 func NewRouter(domain string, defaultPeer string, server *Server, hosts map[string]string) *Router {
 	r := &Router{
-		routes: make(map[string]string),
-		hosts:  hosts,
-		domain: fmt.Sprintf("%s.%s", routeHost, domain),
-		server: server,
+		routes:      make(map[string]string),
+		hosts:       hosts,
+		apiDomain:   server.cfg.GetFQDN(apiHost),
+		routeDomain: server.cfg.GetFQDN(routeHost),
+		server:      server,
 	}
 	r.Transport = &http.Transport{
 		Proxy:       r.Proxy,
@@ -48,14 +56,10 @@ func NewRouter(domain string, defaultPeer string, server *Server, hosts map[stri
 	return r
 }
 
-func (r *Router) GetRouteDomain(peer string) string {
-	return peer + "." + r.domain
-}
-
 func (r *Router) makeURL(peer string) *url.URL {
 	return &url.URL{
 		Scheme: "http",
-		Host:   r.GetRouteDomain(peer),
+		Host:   peer + "." + r.routeDomain,
 	}
 }
 
@@ -118,7 +122,10 @@ func (r *Router) DialContext(ctx context.Context, network, addr string) (net.Con
 	if err != nil {
 		return nil, err
 	}
-	if peer, ok := util.StripDomain(host, r.domain); ok {
+	if peer, ok := util.StripDomain(host, r.routeDomain); ok {
+		return r.server.DialPeerContext(ctx, peer)
+	}
+	if peer, ok := util.StripDomain(host, r.apiDomain); ok {
 		return r.server.DialPeerContext(ctx, peer)
 	}
 	host = func(host string) string {
