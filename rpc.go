@@ -6,22 +6,21 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/rpc"
 	"net/url"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/hexian000/gated/proto"
 	"github.com/hexian000/gated/slog"
 )
 
-func (p *peer) call(ctx context.Context, method string, args interface{}, reply interface{}) error {
-	c, err := p.Open()
-	if err != nil {
-		slog.Debug("rpc call:", err)
-		return err
-	}
+func (p *peer) call(conn net.Conn, deadline time.Time, method string, args interface{}, reply interface{}) error {
+	conn.SetDeadline(deadline)
+	defer conn.SetDeadline(time.Time{})
 	host := p.cfg.GetFQDN(apiHost)
 	req := &http.Request{
 		Method: http.MethodConnect,
@@ -32,11 +31,11 @@ func (p *peer) call(ctx context.Context, method string, args interface{}, reply 
 		Header: map[string][]string{},
 		Host:   host,
 	}
-	if err := req.WriteProxy(c); err != nil {
+	if err := req.WriteProxy(conn); err != nil {
 		slog.Debug("rpc call:", err)
 		return err
 	}
-	resp, err := http.ReadResponse(bufio.NewReader(c), req)
+	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
 	if err != nil {
 		slog.Debug("rpc call:", err)
 		return err
@@ -45,11 +44,24 @@ func (p *peer) call(ctx context.Context, method string, args interface{}, reply 
 		slog.Debug("rpc call:", resp.Status)
 		return fmt.Errorf("rpc call: %v", resp.Status)
 	}
-	client := rpc.NewClient(c)
+	client := rpc.NewClient(conn)
 	return client.Call(method, args, reply)
 }
 
-func (s *Server) gossip(ctx context.Context, method string, args interface{}, reply interface{}) error {
+func (p *peer) Call(ctx context.Context, method string, args interface{}, reply interface{}) error {
+	conn, err := p.DialContext(ctx)
+	if err != nil {
+		slog.Debug("rpc call:", err)
+		return err
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = time.Time{}
+	}
+	return p.call(conn, deadline, method, args, reply)
+}
+
+func (s *Server) Gossip(ctx context.Context, method string, args interface{}, reply interface{}) error {
 	p := func() *peer {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
@@ -67,12 +79,7 @@ func (s *Server) gossip(ctx context.Context, method string, args interface{}, re
 	if p == nil {
 		return errors.New("no connected peer")
 	}
-	if !p.isConnected() {
-		if err := s.dialPeer(ctx, p); err != nil {
-			return err
-		}
-	}
-	return p.call(ctx, method, args, reply)
+	return p.Call(ctx, method, args, reply)
 }
 
 type rpcResult struct {
@@ -80,7 +87,8 @@ type rpcResult struct {
 	err   error
 }
 
-func (s *Server) broadcast(method string, args interface{}, replyType reflect.Type) <-chan rpcResult {
+func (s *Server) Broadcast(method string, args interface{}, replyType reflect.Type) <-chan rpcResult {
+	timeout := s.cfg.Timeout()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	wg := sync.WaitGroup{}
@@ -93,10 +101,14 @@ func (s *Server) broadcast(method string, args interface{}, replyType reflect.Ty
 		wg.Add(1)
 		go func(name string, p *peer) {
 			defer wg.Done()
-			ctx := s.canceller.WithTimeout(s.cfg.Timeout())
-			defer s.canceller.Cancel(ctx)
+			conn, err := p.Open()
+			if err != nil {
+				slog.Errorf("broadcast %s: %v", name, err)
+				ch <- rpcResult{nil, err}
+				return
+			}
 			reply := reflect.New(replyType).Interface()
-			err := p.call(ctx, method, args, reply)
+			err = p.call(conn, time.Now().Add(timeout), method, args, reply)
 			if err != nil {
 				slog.Errorf("broadcast %s: %v", name, err)
 				ch <- rpcResult{nil, err}
@@ -121,7 +133,7 @@ type RPC struct {
 func (r *RPC) Bootstrap(args *proto.PeerInfo, reply *proto.Cluster) error {
 	slog.Verbosef("RPC.Bootstrap: %v", args)
 	r.peer.info = *args
-	_ = r.server.broadcast("RPC.Update", args, reflect.TypeOf(proto.None{}))
+	_ = r.server.Broadcast("RPC.Update", args, reflect.TypeOf(proto.None{}))
 	r.server.addPeer(r.peer)
 	*reply = *r.server.ClusterInfo()
 	r.server.print()
@@ -135,7 +147,7 @@ func (r *RPC) Update(args *proto.PeerInfo, reply *proto.None) error {
 		return nil
 	}
 	if r.server.Update(args) {
-		_ = r.server.broadcast("RPC.Update", args, reflect.TypeOf(proto.None{}))
+		_ = r.server.Broadcast("RPC.Update", args, reflect.TypeOf(proto.None{}))
 	}
 	r.server.print()
 	r.router.print()
@@ -171,7 +183,7 @@ func (r *RPC) Ping(args *proto.Ping, reply *proto.Ping) error {
 	}
 	ctx := r.server.canceller.WithTimeout(r.peer.cfg.Timeout())
 	defer r.server.canceller.Cancel(ctx)
-	if err := peer.call(ctx, "RPC.Ping", args, &proto.Ping{}); err != nil {
+	if err := peer.Call(ctx, "RPC.Ping", args, &proto.Ping{}); err != nil {
 		return err
 	}
 	return nil

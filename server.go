@@ -92,23 +92,6 @@ func (s *Server) dialPeer(ctx context.Context, p *peer) error {
 	return nil
 }
 
-func (s *Server) openPeer(p *peer) (net.Conn, error) {
-	if !p.isConnected() {
-		if !p.isReachable() {
-			return nil, fmt.Errorf("peer %q didn't advertise an address", p.info.PeerName)
-		}
-		if err := func() error {
-			ctx := s.canceller.WithTimeout(s.cfg.Timeout())
-			defer s.canceller.Cancel(ctx)
-			return s.dialPeer(ctx, p)
-
-		}(); err != nil {
-			return nil, err
-		}
-	}
-	return p.Open()
-}
-
 func (s *Server) bootstrap(addr, sni string) {
 	p := newPeer(s)
 	p.info.Address = addr
@@ -156,7 +139,7 @@ func (s *Server) Shutdown(ctx context.Context) {
 
 func (s *Server) FindProxy(peer string) (string, error) {
 	proxy := ""
-	for result := range s.broadcast("RPC.Ping", &proto.Ping{
+	for result := range s.Broadcast("RPC.Ping", &proto.Ping{
 		Source:      s.LocalPeerName(),
 		Destination: peer,
 		TTL:         1,
@@ -177,11 +160,13 @@ func (s *Server) FindProxy(peer string) (string, error) {
 
 func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, error) {
 	p := s.getPeer(peer)
-	conn, err := s.openPeer(p)
-	if err == nil {
-		return conn, nil
+	if p != nil {
+		conn, err := p.DialContext(ctx)
+		if err == nil {
+			return conn, nil
+		}
+		slog.Debug("peer dial:", err)
 	}
-	slog.Debug("peer dial:", err)
 	proxy, err := s.FindProxy(peer)
 	if err != nil {
 		slog.Debug("find proxy:", err)
@@ -189,7 +174,10 @@ func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, er
 	}
 	slog.Debugf("dial peer %s via %s", peer, proxy)
 	p = s.getPeer(proxy)
-	return s.openPeer(p)
+	if p == nil {
+		return nil, fmt.Errorf("unknown peer: %s", proxy)
+	}
+	return p.DialContext(ctx)
 }
 
 func (s *Server) serve(tcpConn net.Conn) {
@@ -227,7 +215,7 @@ func (s *Server) maintenance() {
 	idleTimeout := time.Duration(s.cfg.Current().Transport.IdleTimeout) * time.Second
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for _, p := range s.peers {
+	for name, p := range s.peers {
 		if !p.isReachable() {
 			continue
 		}
@@ -246,6 +234,7 @@ func (s *Server) maintenance() {
 		if time.Since(p.lastSeen) > idleTimeout {
 			slog.Infof("idle timeout expired: %s", p.info.PeerName)
 			_ = p.Close()
+			delete(s.peers, name)
 		}
 	}
 }
@@ -254,7 +243,7 @@ func (s *Server) sync() {
 	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 	defer s.canceller.Cancel(ctx)
 	var cluster proto.Cluster
-	err := s.gossip(ctx, "RPC.Sync", s.ClusterInfo(), &cluster)
+	err := s.Gossip(ctx, "RPC.Sync", s.ClusterInfo(), &cluster)
 	if err != nil {
 		slog.Warning("gossip:", err)
 	}

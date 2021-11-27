@@ -3,6 +3,7 @@ package gated
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -22,11 +23,9 @@ type peer struct {
 	created  time.Time
 	lastSeen time.Time
 
-	server    *Server
-	cfg       *Config
-	resolver  Resolver
-	apiServer *http.Server
-	apiClient *http.Client
+	server   *Server
+	cfg      *Config
+	resolver Resolver
 }
 
 func newPeer(s *Server) *peer {
@@ -62,9 +61,12 @@ func (p *peer) checkNumStreams() {
 }
 
 func (p *peer) Open() (net.Conn, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	if p.mux == nil {
+	mux := func() *yamux.Session {
+		p.mu.RLock()
+		defer p.mu.RUnlock()
+		return p.mux
+	}()
+	if mux == nil {
 		return nil, fmt.Errorf("peer %s is not connected", p.info.PeerName)
 	}
 	conn, err := p.mux.Open()
@@ -74,15 +76,24 @@ func (p *peer) Open() (net.Conn, error) {
 	return conn, err
 }
 
+func (p *peer) getSession() *yamux.Session {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.mux
+}
+
 func (p *peer) DialContext(ctx context.Context) (net.Conn, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.mux == nil || p.mux.IsClosed() {
+	mux := p.getSession()
+	if mux == nil || mux.IsClosed() {
 		if err := p.server.dialPeer(ctx, p); err != nil {
 			return nil, err
 		}
+		mux = p.getSession()
+		if mux == nil {
+			return nil, errors.New("retry later")
+		}
 	}
-	conn, err := p.mux.Open()
+	conn, err := mux.Open()
 	if err == nil {
 		p.lastSeen = time.Now()
 	}
@@ -101,34 +112,23 @@ func (p *peer) newHandler() http.Handler {
 	return newAPIHandler(p.server, rpcServer)
 }
 
-func (p *peer) setup(mux *yamux.Session) {
-	timeout := p.cfg.Timeout()
-	p.mux = mux
-	p.apiServer = &http.Server{
+func (p *peer) serveAPI(mux *yamux.Session) {
+	server := &http.Server{
 		Handler:           p.newHandler(),
-		ReadHeaderTimeout: timeout,
+		ReadHeaderTimeout: p.cfg.Timeout(),
 		ErrorLog:          newHTTPLogger(),
 	}
-	p.apiClient = &http.Client{
-		Transport: &http.Transport{
-			Proxy: p.resolver.Proxy,
-			DialContext: func(ctx context.Context, network string, addr string) (net.Conn, error) {
-				return p.DialContext(ctx)
-			},
-			DisableKeepAlives: true,
-		},
-		Timeout: timeout,
-	}
+	_ = server.Serve(mux)
 }
 
 func (p *peer) Serve(mux *yamux.Session) {
 	func() {
 		p.mu.Lock()
 		defer p.mu.Unlock()
-		p.setup(mux)
+		p.mux = mux
 	}()
 	slog.Verbosef("serve %v: rpc online", mux.RemoteAddr())
-	_ = p.apiServer.Serve(p.mux)
+	p.serveAPI(mux)
 }
 
 func (p *peer) dialMux(ctx context.Context, addr, sni string) (*yamux.Session, error) {
@@ -140,7 +140,7 @@ func (p *peer) dialMux(ctx context.Context, addr, sni string) (*yamux.Session, e
 		return nil, err
 	}
 	connId := tcpConn.RemoteAddr()
-	tlsConn := tls.Client(tcpConn, p.cfg.TLSConfig(sni))
+	tlsConn := tls.Client(tcpConn, p.server.cfg.TLSConfig(sni))
 	err = tlsConn.HandshakeContext(ctx)
 	if err != nil {
 		_ = tcpConn.Close()
@@ -148,7 +148,7 @@ func (p *peer) dialMux(ctx context.Context, addr, sni string) (*yamux.Session, e
 		return nil, err
 	}
 	p.cfg.SetConnParams(tcpConn)
-	muxConn, err := yamux.Client(tlsConn, p.cfg.MuxConfig())
+	muxConn, err := yamux.Client(tlsConn, p.server.cfg.MuxConfig())
 	if err != nil {
 		_ = tlsConn.Close()
 		slog.Errorf("bootstrap %v: %v", connId, err)
@@ -158,7 +158,7 @@ func (p *peer) dialMux(ctx context.Context, addr, sni string) (*yamux.Session, e
 }
 
 func (p *peer) Bootstrap(ctx context.Context) (*proto.Cluster, error) {
-	addr, err := func() (net.Addr, error) {
+	mux, err := func() (*yamux.Session, error) {
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		addr, sni := p.info.Address, p.info.ServerName
@@ -169,22 +169,31 @@ func (p *peer) Bootstrap(ctx context.Context) (*proto.Cluster, error) {
 		if err != nil {
 			return nil, err
 		}
-		p.setup(mux)
-		go p.apiServer.Serve(p.mux)
-		return mux.RemoteAddr(), nil
+		p.mux = mux
+		go p.serveAPI(mux)
+		return mux, nil
 	}()
 	if err != nil {
 		return nil, err
 	}
-
-	slog.Verbosef("bootstrap %v: join cluster", addr)
-	var cluster proto.Cluster
-	if err := p.call(ctx, "RPC.Bootstrap", p.server.self(), &cluster); err != nil {
+	connId := mux.RemoteAddr()
+	conn, err := mux.Open()
+	if err != nil {
 		return nil, err
 	}
-	slog.Verbosef("bootstrap %v: reply: %v", addr, cluster)
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = time.Time{}
+	}
+	self := p.server.self()
+	slog.Verbosef("bootstrap %v: call RPC.Bootstrap: %v", connId, self)
+	var cluster proto.Cluster
+	if err := p.call(conn, deadline, "RPC.Bootstrap", self, &cluster); err != nil {
+		return nil, err
+	}
+	slog.Verbosef("bootstrap %v: reply: %v", connId, cluster)
 	p.info = cluster.Self
-	slog.Infof("bootstrap %v: ok, remote peer: %s", addr, p.info.PeerName)
+	slog.Infof("bootstrap %v: ok, remote peer: %s", connId, p.info.PeerName)
 	return &cluster, nil
 }
 
@@ -195,7 +204,5 @@ func (p *peer) Close() (err error) {
 		err = p.mux.Close()
 		p.mux = nil
 	}
-	p.apiServer = nil
-	p.apiClient = nil
 	return
 }
