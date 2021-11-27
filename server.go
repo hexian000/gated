@@ -79,33 +79,24 @@ func (s *Server) LocalPeerName() string {
 	return s.cfg.Current().Name
 }
 
-func (s *Server) dialPeer(ctx context.Context, p *peer) error {
-	cluster, err := p.Bootstrap(ctx)
+func (s *Server) bootstrap(ctx context.Context, p *peer) error {
+	addr := p.info.Address
+	cluster, err := p.Dial(ctx)
 	if err != nil {
+		slog.Errorf("bootstrap %s: %v", addr, err)
 		return err
 	}
 	s.addPeer(p)
 	s.MergeCluster(cluster)
-	slog.Verbosef("bootstrap %s[%s]: ok", p.info.Address, p.info.PeerName)
+	slog.Infof("bootstrap %s[%s]: ok", p.info.Address, p.info.PeerName)
 	s.print()
 	s.router.print()
 	return nil
 }
 
-func (s *Server) bootstrap(addr, sni string) {
-	p := newPeer(s)
-	p.info.Address = addr
-	p.info.ServerName = sni
-	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
-	defer s.canceller.Cancel(ctx)
-	if err := s.dialPeer(ctx, p); err != nil {
-		slog.Errorf("bootstrap %s: %v", addr, err)
-		return
-	}
-}
-
 func (s *Server) Start() error {
 	cfg := s.cfg.Current()
+	timeout := time.Duration(cfg.Timeout) * time.Second
 	if cfg.Listen != "" {
 		slog.Info("tls listen:", cfg.Listen)
 		l, err := net.Listen(network, cfg.Listen)
@@ -117,7 +108,16 @@ func (s *Server) Start() error {
 		go s.Serve(l)
 	}
 	for _, server := range cfg.Servers {
-		go s.bootstrap(server.Address, server.ServerName)
+		p := newPeer(s)
+		p.info.Address = server.Address
+		p.info.ServerName = server.ServerName
+		go func() {
+			ctx := s.canceller.WithTimeout(timeout)
+			defer s.canceller.Cancel(ctx)
+			if err := s.bootstrap(ctx, p); err != nil {
+				slog.Error("start:", err)
+			}
+		}()
 	}
 	if cfg.HTTPListen != "" {
 		slog.Info("http listen:", cfg.HTTPListen)
@@ -226,7 +226,7 @@ func (s *Server) maintenance() {
 			go func() {
 				ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 				defer s.canceller.Cancel(ctx)
-				if err := s.dialPeer(ctx, p); err != nil {
+				if err := s.bootstrap(ctx, p); err != nil {
 					slog.Errorf("redial %s: %v", p.info.PeerName, err)
 				}
 			}()

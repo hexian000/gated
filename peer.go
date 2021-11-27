@@ -85,12 +85,12 @@ func (p *peer) getSession() *yamux.Session {
 func (p *peer) DialContext(ctx context.Context) (net.Conn, error) {
 	mux := p.getSession()
 	if mux == nil || mux.IsClosed() {
-		if err := p.server.dialPeer(ctx, p); err != nil {
+		if err := p.server.bootstrap(ctx, p); err != nil {
 			return nil, err
 		}
 		mux = p.getSession()
 		if mux == nil {
-			return nil, errors.New("retry later")
+			return nil, errors.New("temporary failure, retry later")
 		}
 	}
 	conn, err := mux.Open()
@@ -131,16 +131,18 @@ func (p *peer) Serve(mux *yamux.Session) {
 	p.serveAPI(mux)
 }
 
-func (p *peer) dialMux(ctx context.Context, addr, sni string) (*yamux.Session, error) {
-	slog.Verbosef("bootstrap: setup connection to %s", addr)
+func (p *peer) Dial(ctx context.Context) (*proto.Cluster, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	slog.Verbosef("bootstrap: setup connection to %s", p.info.Address)
 	dialer := net.Dialer{}
-	tcpConn, err := dialer.DialContext(ctx, network, addr)
+	tcpConn, err := dialer.DialContext(ctx, network, p.info.Address)
 	if err != nil {
 		slog.Errorf("bootstrap: %v", err)
 		return nil, err
 	}
 	connId := tcpConn.RemoteAddr()
-	tlsConn := tls.Client(tcpConn, p.server.cfg.TLSConfig(sni))
+	tlsConn := tls.Client(tcpConn, p.server.cfg.TLSConfig(p.info.ServerName))
 	err = tlsConn.HandshakeContext(ctx)
 	if err != nil {
 		_ = tcpConn.Close()
@@ -154,30 +156,9 @@ func (p *peer) dialMux(ctx context.Context, addr, sni string) (*yamux.Session, e
 		slog.Errorf("bootstrap %v: %v", connId, err)
 		return nil, err
 	}
-	return muxConn, nil
-}
-
-func (p *peer) Bootstrap(ctx context.Context) (*proto.Cluster, error) {
-	mux, err := func() (*yamux.Session, error) {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		addr, sni := p.info.Address, p.info.ServerName
-		if p.mux != nil {
-			_ = p.mux.Close()
-		}
-		mux, err := p.dialMux(ctx, addr, sni)
-		if err != nil {
-			return nil, err
-		}
-		p.mux = mux
-		go p.serveAPI(mux)
-		return mux, nil
-	}()
-	if err != nil {
-		return nil, err
-	}
-	connId := mux.RemoteAddr()
-	conn, err := mux.Open()
+	go p.serveAPI(muxConn)
+	p.mux = muxConn
+	conn, err := p.mux.Open()
 	if err != nil {
 		return nil, err
 	}
