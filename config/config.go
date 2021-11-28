@@ -18,6 +18,7 @@ type Transport struct {
 	Timeout           int    `json:"timeout"`
 	WriteTimeout      int    `json:"writetimeout"`
 	IdleTimeout       int    `json:"idletimeout"`
+	CacheTimeout      int    `json:"cachetimeout"`
 	StreamWindow      uint32 `json:"window"`
 }
 
@@ -54,6 +55,7 @@ func New() *Main {
 			Timeout:           15,
 			WriteTimeout:      15,
 			IdleTimeout:       15 * 60,
+			CacheTimeout:      15 * 60,
 			StreamWindow:      256 * 1024,
 		},
 	}

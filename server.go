@@ -35,7 +35,15 @@ type Server struct {
 	tlsListener  net.Listener
 	httpListener net.Listener
 
+	proxyMu    sync.Mutex
+	proxyCache map[string]peerProxy
+
 	shutdownCh chan struct{}
+}
+
+type peerProxy struct {
+	proxy string
+	saved time.Time
 }
 
 func NewServer(cfg *Config) *Server {
@@ -45,6 +53,7 @@ func NewServer(cfg *Config) *Server {
 		peers:      make(map[string]*peer),
 		forwarder:  proxy.NewForwarder(),
 		canceller:  util.NewCanceller(),
+		proxyCache: make(map[string]peerProxy),
 		shutdownCh: make(chan struct{}),
 		httpServer: &http.Server{
 			ReadHeaderTimeout: timeout,
@@ -135,8 +144,7 @@ func (s *Server) Shutdown(ctx context.Context) {
 	panic("TODO")
 }
 
-func (s *Server) FindProxy(peer string) (string, error) {
-	proxy := ""
+func (s *Server) findProxy(peer string) (*peer, error) {
 	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 	defer s.canceller.Cancel(ctx)
 	for result := range s.Broadcast(ctx, "RPC.Ping", &proto.Ping{
@@ -148,35 +156,64 @@ func (s *Server) FindProxy(peer string) (string, error) {
 			slog.Warning("ping:", result.err)
 			continue
 		}
-		proxy = result.from.info.PeerName
-		break
+		return result.from, nil
 	}
-	if proxy == "" {
-		return "", fmt.Errorf("ping: %s is unreachable", peer)
+	return nil, fmt.Errorf("ping: %s is unreachable", peer)
+}
+
+func (s *Server) getProxyCache(destination string) *peer {
+	s.proxyMu.Lock()
+	defer s.proxyMu.Unlock()
+	info, ok := s.proxyCache[destination]
+	if !ok {
+		return nil
 	}
-	return proxy, nil
+	if time.Since(info.saved) > s.cfg.CacheTimeout() {
+		delete(s.proxyCache, destination)
+		return nil
+	}
+	p := s.getPeer(info.proxy)
+	if p == nil {
+		delete(s.proxyCache, destination)
+		return nil
+	}
+	return p
+}
+
+func (s *Server) deleteProxyCache(destination string) {
+	s.proxyMu.Lock()
+	defer s.proxyMu.Unlock()
+	delete(s.proxyCache, destination)
+}
+
+func (s *Server) saveProxyCache(destination, proxy string) {
+	s.proxyMu.Lock()
+	defer s.proxyMu.Unlock()
+	s.proxyCache[destination] = peerProxy{
+		proxy: proxy,
+		saved: time.Now(),
+	}
 }
 
 func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, error) {
-	p := s.getPeer(peer)
-	if p != nil {
-		conn, err := p.DialContext(ctx)
-		if err == nil {
-			return conn, nil
+	if proxy := s.getProxyCache(peer); proxy != nil {
+		conn, err := proxy.DialContext(ctx)
+		if err != nil {
+			s.deleteProxyCache(peer)
 		}
-		slog.Debug("peer dial:", err)
+		return conn, err
 	}
-	proxy, err := s.FindProxy(peer)
+	proxy, err := s.findProxy(peer)
 	if err != nil {
 		slog.Debug("find proxy:", err)
 		return nil, err
 	}
-	slog.Debugf("dial peer %s via %s", peer, proxy)
-	p = s.getPeer(proxy)
-	if p == nil {
-		return nil, fmt.Errorf("unknown peer: %s", proxy)
+	conn, err := proxy.DialContext(ctx)
+	if err == nil {
+		s.saveProxyCache(peer, proxy.info.PeerName)
 	}
-	return p.DialContext(ctx)
+	slog.Debugf("dial peer %s via %s", peer, proxy)
+	return conn, err
 }
 
 func (s *Server) serve(tcpConn net.Conn) {

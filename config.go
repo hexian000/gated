@@ -122,6 +122,10 @@ func (c *Config) Timeout() time.Duration {
 	return time.Duration(c.Current().Timeout) * time.Second
 }
 
+func (c *Config) CacheTimeout() time.Duration {
+	return time.Duration(c.Current().CacheTimeout) * time.Second
+}
+
 func (c *Config) GetFQDN(host string) string {
 	return host + "." + c.Current().Domain
 }
