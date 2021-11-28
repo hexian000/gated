@@ -85,12 +85,7 @@ func (s *Server) updatePeerInfo(info *proto.PeerInfo) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if p, ok := s.peers[info.PeerName]; ok {
-		if p.info.Timestamp < info.Timestamp {
-			slog.Debug("peer info update:", info)
-			p.info = *info
-			return true
-		}
-		return false
+		return p.update(info)
 	}
 	slog.Debug("peer info add:", info)
 	p := newPeer(s)

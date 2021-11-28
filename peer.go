@@ -23,6 +23,8 @@ type peer struct {
 	created  time.Time
 	lastSeen time.Time
 
+	bootstrapCh chan struct{}
+
 	server   *Server
 	cfg      *Config
 	resolver Resolver
@@ -30,10 +32,11 @@ type peer struct {
 
 func newPeer(s *Server) *peer {
 	return &peer{
-		created:  time.Now(),
-		server:   s,
-		cfg:      s.cfg,
-		resolver: s.router,
+		created:     time.Now(),
+		bootstrapCh: make(chan struct{}, 1),
+		server:      s,
+		cfg:         s.cfg,
+		resolver:    s.router,
 	}
 }
 
@@ -58,6 +61,17 @@ func (p *peer) checkNumStreams() {
 	if p.mux.NumStreams() > 0 {
 		p.lastSeen = time.Now()
 	}
+}
+
+func (p *peer) update(info *proto.PeerInfo) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.info.Timestamp < info.Timestamp {
+		slog.Debug("peer info update:", info)
+		p.info = *info
+		return true
+	}
+	return false
 }
 
 func (p *peer) Open() (net.Conn, error) {
@@ -132,11 +146,14 @@ func (p *peer) Serve(mux *yamux.Session) {
 }
 
 func (p *peer) Bootstrap(ctx context.Context) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.mux != nil && !p.mux.IsClosed() {
+	p.bootstrapCh <- struct{}{}
+	defer func() {
+		<-p.bootstrapCh
+	}()
+	if p.isConnected() {
 		return nil
 	}
+
 	slog.Verbosef("bootstrap: setup connection to %s", p.info.Address)
 	dialer := net.Dialer{}
 	tcpConn, err := dialer.DialContext(ctx, network, p.info.Address)
@@ -160,8 +177,12 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 		return err
 	}
 	go p.serveAPI(muxConn)
-	p.mux = muxConn
-	conn, err := p.mux.Open()
+	func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.mux = muxConn
+	}()
+	conn, err := muxConn.Open()
 	if err != nil {
 		return err
 	}
@@ -185,11 +206,10 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 }
 
 func (p *peer) Close() (err error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	if p.mux != nil {
 		err = p.mux.Close()
-		p.mux = nil
 	}
 	return
 }
