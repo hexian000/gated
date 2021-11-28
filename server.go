@@ -190,6 +190,15 @@ func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, er
 		}
 		return conn, err
 	}
+	p := s.getPeer(peer)
+	if p != nil && p.isReachable() {
+		// prefer direct
+		conn, err := p.DialContext(ctx)
+		if err == nil {
+			return conn, nil
+		}
+		slog.Debugf("dial peer %s direct: %v", peer, err)
+	}
 	proxy, err := s.findProxy(peer)
 	if err != nil {
 		slog.Debug("find proxy:", err)
@@ -207,7 +216,7 @@ func (s *Server) serve(tcpConn net.Conn) {
 	connId := tcpConn.RemoteAddr()
 	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 	defer s.canceller.Cancel(ctx)
-	slog.Verbosef("serve %v: setup connection", connId)
+	slog.Verbosef("serve %v: setupy connection", connId)
 	tlsConn := tls.Server(tcpConn, s.cfg.tls)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		slog.Errorf("serve %v: %v", connId, err)
