@@ -216,7 +216,7 @@ func (s *Server) serve(tcpConn net.Conn) {
 	connId := tcpConn.RemoteAddr()
 	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 	defer s.canceller.Cancel(ctx)
-	slog.Verbosef("serve %v: setupy connection", connId)
+	slog.Verbosef("serve %v: setup connection", connId)
 	tlsConn := tls.Server(tcpConn, s.cfg.tls)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		slog.Errorf("serve %v: %v", connId, err)
