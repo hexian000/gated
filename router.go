@@ -79,13 +79,6 @@ func (r *Router) update(hosts []string, peer string) {
 	}
 }
 
-func (r *Router) print() {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	slog.Debug("router routes:", r.routes)
-	slog.Debug("router hosts:", r.hosts)
-}
-
 func (r *Router) Routes() map[string]string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

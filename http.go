@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	PathStatus = "/status"
-	PathRPC    = "/v1/rpc"
+	PathStatus  = "/status"
+	PathCluster = "/cluster"
+	PathRPC     = "/v1/rpc"
 )
 
 type apiHandler struct {
@@ -26,6 +27,7 @@ type apiHandler struct {
 func newAPIHandler(s *Server, rpcHandler http.Handler) *apiHandler {
 	mux := http.NewServeMux()
 	mux.Handle(PathStatus, &statusHandler{s})
+	mux.Handle(PathCluster, &clusterHandler{s})
 	if rpcHandler != nil {
 		mux.Handle(PathRPC, rpcHandler)
 	}

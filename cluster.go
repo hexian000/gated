@@ -37,7 +37,7 @@ func (s *Server) addPeer(peer *peer) {
 	func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		if p, ok := s.peers[name]; ok {
+		if p, ok := s.peers[name]; ok && p != peer {
 			_ = p.Close()
 		}
 		s.peers[name] = peer
@@ -45,20 +45,38 @@ func (s *Server) addPeer(peer *peer) {
 	s.router.update(peer.info.Hosts, name)
 }
 
-func (s *Server) Peers() map[string]proto.PeerInfo {
+// func (s *Server) deletePeer(name string) {
+// 	s.mu.Lock()
+// 	defer s.mu.Unlock()
+// 	if p, ok := s.peers[name]; ok {
+// 		_ = p.Close()
+// 		delete(s.peers, name)
+// 	}
+// 	// TODO: may also delete routes?
+// }
+
+func (s *Server) getPeers() map[string]*peer {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	peers := make(map[string]proto.PeerInfo)
+	peers := make(map[string]*peer)
 	for name, peer := range s.peers {
-		peers[name] = peer.info
+		peers[name] = peer
 	}
 	return peers
 }
 
 func (s *Server) ClusterInfo() *proto.Cluster {
 	return &proto.Cluster{
-		Self:   *s.self(),
-		Peers:  s.Peers(),
+		Self: *s.self(),
+		Peers: func() map[string]proto.PeerInfo {
+			s.mu.RLock()
+			defer s.mu.RUnlock()
+			peers := make(map[string]proto.PeerInfo)
+			for name, peer := range s.peers {
+				peers[name] = peer.info
+			}
+			return peers
+		}(),
 		Routes: s.router.Routes(),
 	}
 }
@@ -100,10 +118,4 @@ func (s *Server) MergeCluster(cluster *proto.Cluster) {
 		s.Update(&info)
 	}
 	s.router.merge(cluster.Routes)
-}
-
-func (s *Server) print() {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	slog.Debug("peers:", s.peers)
 }

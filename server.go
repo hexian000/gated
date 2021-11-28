@@ -89,8 +89,6 @@ func (s *Server) bootstrap(ctx context.Context, p *peer) error {
 	s.addPeer(p)
 	s.MergeCluster(cluster)
 	slog.Infof("bootstrap %s[%s]: ok", p.info.Address, p.info.PeerName)
-	s.print()
-	s.router.print()
 	return nil
 }
 
@@ -139,10 +137,12 @@ func (s *Server) Shutdown(ctx context.Context) {
 
 func (s *Server) FindProxy(peer string) (string, error) {
 	proxy := ""
-	for result := range s.Broadcast("RPC.Ping", &proto.Ping{
+	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
+	defer s.canceller.Cancel(ctx)
+	for result := range s.Broadcast(ctx, "RPC.Ping", &proto.Ping{
 		Source:      s.LocalPeerName(),
 		Destination: peer,
-		TTL:         1,
+		TTL:         2,
 	}, reflect.TypeOf(proto.Ping{})) {
 		if result.err != nil {
 			slog.Warning("ping:", result.err)
@@ -214,9 +214,7 @@ func (s *Server) maintenance() {
 	cfg := s.cfg.Current()
 	needRedial := cfg.AdvertiseAddr == ""
 	idleTimeout := time.Duration(cfg.Transport.IdleTimeout) * time.Second
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for name, p := range s.peers {
+	for _, p := range s.getPeers() {
 		if !p.isReachable() {
 			continue
 		}
@@ -235,7 +233,6 @@ func (s *Server) maintenance() {
 		if time.Since(p.lastSeen) > idleTimeout {
 			slog.Infof("idle timeout expired: %s", p.info.PeerName)
 			_ = p.Close()
-			delete(s.peers, name)
 		}
 	}
 }
@@ -249,7 +246,6 @@ func (s *Server) sync() {
 		slog.Warning("gossip:", err)
 	}
 	s.MergeCluster(&cluster)
-	s.print()
 	slog.Debug("sync finished with", cluster.Self.PeerName)
 }
 
@@ -283,16 +279,6 @@ func (s *Server) watchdog() {
 
 func (s *Server) CollectMetrics(w *bufio.Writer) {
 	(&metric.Runtime{}).CollectMetrics(w)
-	_, _ = w.WriteString("\n")
-
-	_, _ = w.WriteString("=== Peers ===\n\n")
-	func() {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-		for name, peer := range s.peers {
-			w.WriteString(fmt.Sprintf("%s: %v\n", name, peer.isConnected()))
-		}
-	}()
 	_, _ = w.WriteString("\n")
 
 	_, _ = w.WriteString("=== Server ===\n\n")
