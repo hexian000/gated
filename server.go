@@ -148,8 +148,7 @@ func (s *Server) FindProxy(peer string) (string, error) {
 			slog.Warning("ping:", result.err)
 			continue
 		}
-		reply := result.reply.(*proto.Ping)
-		proxy = reply.Source
+		proxy = result.from.info.PeerName
 		break
 	}
 	if proxy == "" {
