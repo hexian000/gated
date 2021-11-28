@@ -2,13 +2,14 @@ package gated
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"net/http"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/hexian000/gated/proto"
-	"github.com/hexian000/gated/slog"
 	"github.com/hexian000/gated/version"
 )
 
@@ -55,11 +56,15 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 	_, _ = w.WriteString(version.WebBanner(h.s.LocalPeerName()))
 
 	_, _ = w.WriteString("=== Peers ===\n\n")
+	wg := sync.WaitGroup{}
+	ch := make(chan string, 10)
 	for _, p := range h.s.getPeers() {
-		func(p *peer) {
+		wg.Add(1)
+		go func(p *peer) {
+			defer wg.Done()
 			name := p.info.PeerName
-			slog.Verbosef("*** cluster poll %q begin", name)
-			w.WriteString(fmt.Sprintf("%s: %v, %v\n", name, p.isConnected(), p.lastSeen))
+			w := &bytes.Buffer{}
+			w.WriteString(fmt.Sprintf("%s: %v, %v\n", name, p.isConnected(), time.Since(p.lastSeen)))
 			ctx := h.s.canceller.WithTimeout(h.s.cfg.Timeout())
 			defer h.s.canceller.Cancel(ctx)
 			start := time.Now()
@@ -68,21 +73,29 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 				Destination: name,
 				TTL:         2,
 			}, reflect.TypeOf(proto.Ping{})) {
+				from := result.from.info.PeerName
 				if result.err != nil {
-					w.WriteString(fmt.Sprintf("    %v: error from %q: %s\n", time.Since(start), result.from.info.PeerName, result.err.Error()))
+					w.WriteString(fmt.Sprintf("    %v: error from %s: %s\n", time.Since(start), from, result.err.Error()))
 					continue
 				}
 				reply := result.reply.(*proto.Ping)
-				w.WriteString(fmt.Sprintf("    %v: reply from %q, TTL=%d\n", time.Since(start), reply.Source, reply.TTL))
+				w.WriteString(fmt.Sprintf("    %v: reply from %s, TTL=%d\n", time.Since(start), from, reply.TTL))
 			}
-			slog.Verbosef("*** cluster poll %q is done", name)
+			ch <- w.String()
 		}(p)
+	}
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+	for s := range ch {
+		_, _ = w.WriteString(s)
 	}
 	_, _ = w.WriteString("\n")
 
 	_, _ = w.WriteString("=== Routes ===\n\n")
 	for host, peer := range h.s.router.Routes() {
-		w.WriteString(fmt.Sprintf("%q via %q\n", host, peer))
+		w.WriteString(fmt.Sprintf("%q via %s\n", host, peer))
 	}
 	_, _ = w.WriteString("\n")
 
