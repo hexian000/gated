@@ -146,6 +146,9 @@ func (p *peer) Serve(mux *yamux.Session) {
 }
 
 func (p *peer) Bootstrap(ctx context.Context) error {
+	if !p.isReachable() {
+		return fmt.Errorf("peer %s is unreachable", p.info.PeerName)
+	}
 	p.bootstrapCh <- struct{}{}
 	defer func() {
 		<-p.bootstrapCh
