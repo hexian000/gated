@@ -65,6 +65,7 @@ func NewServer(cfg *Config) *Server {
 	s.httpServer.Handler = s.handler
 	s.httpClient = &http.Client{
 		Transport: s.router.Transport,
+		Timeout:   timeout,
 	}
 	return s
 }

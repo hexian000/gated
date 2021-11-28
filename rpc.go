@@ -11,6 +11,7 @@ import (
 	"net/rpc"
 	"net/url"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -162,7 +163,7 @@ func (r *RPC) Ping(args *proto.Ping, reply *proto.Ping) error {
 	slog.Verbosef("RPC.Ping: %v", args)
 	name := r.server.LocalPeerName()
 	args.TTL--
-	if name == args.Destination {
+	if strings.EqualFold(name, args.Destination) {
 		*reply = proto.Ping{
 			Source:      name,
 			Destination: args.Destination,
