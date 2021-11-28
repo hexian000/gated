@@ -85,7 +85,7 @@ func (p *peer) getSession() *yamux.Session {
 func (p *peer) DialContext(ctx context.Context) (net.Conn, error) {
 	mux := p.getSession()
 	if mux == nil || mux.IsClosed() {
-		if err := p.server.bootstrap(ctx, p); err != nil {
+		if err := p.Bootstrap(ctx); err != nil {
 			return nil, err
 		}
 		mux = p.getSession()
@@ -131,15 +131,18 @@ func (p *peer) Serve(mux *yamux.Session) {
 	p.serveAPI(mux)
 }
 
-func (p *peer) Dial(ctx context.Context) (*proto.Cluster, error) {
+func (p *peer) Bootstrap(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.mux != nil && !p.mux.IsClosed() {
+		return nil
+	}
 	slog.Verbosef("bootstrap: setup connection to %s", p.info.Address)
 	dialer := net.Dialer{}
 	tcpConn, err := dialer.DialContext(ctx, network, p.info.Address)
 	if err != nil {
 		slog.Errorf("bootstrap: %v", err)
-		return nil, err
+		return err
 	}
 	connId := tcpConn.RemoteAddr()
 	tlsConn := tls.Client(tcpConn, p.server.cfg.TLSConfig(p.info.ServerName))
@@ -147,20 +150,20 @@ func (p *peer) Dial(ctx context.Context) (*proto.Cluster, error) {
 	if err != nil {
 		_ = tcpConn.Close()
 		slog.Errorf("bootstrap %v: %v", connId, err)
-		return nil, err
+		return err
 	}
 	p.cfg.SetConnParams(tcpConn)
 	muxConn, err := yamux.Client(tlsConn, p.server.cfg.MuxConfig())
 	if err != nil {
 		_ = tlsConn.Close()
 		slog.Errorf("bootstrap %v: %v", connId, err)
-		return nil, err
+		return err
 	}
 	go p.serveAPI(muxConn)
 	p.mux = muxConn
 	conn, err := p.mux.Open()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	deadline, ok := ctx.Deadline()
 	if !ok {
@@ -170,13 +173,15 @@ func (p *peer) Dial(ctx context.Context) (*proto.Cluster, error) {
 	slog.Verbosef("bootstrap %v: call RPC.Bootstrap: %v", connId, self)
 	var cluster proto.Cluster
 	if err := p.call(conn, deadline, "RPC.Bootstrap", self, &cluster); err != nil {
-		return nil, err
+		return err
 	}
 	slog.Verbosef("bootstrap %v: reply: %v", connId, cluster)
 	p.lastSeen = time.Now()
 	p.info = cluster.Self
 	slog.Infof("bootstrap %v: ok, remote peer: %s", connId, p.info.PeerName)
-	return &cluster, nil
+	p.server.addPeer(p)
+	p.server.MergeCluster(&cluster)
+	return nil
 }
 
 func (p *peer) Close() (err error) {

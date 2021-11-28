@@ -88,19 +88,6 @@ func (s *Server) LocalPeerName() string {
 	return s.cfg.Current().Name
 }
 
-func (s *Server) bootstrap(ctx context.Context, p *peer) error {
-	addr := p.info.Address
-	cluster, err := p.Dial(ctx)
-	if err != nil {
-		slog.Errorf("bootstrap %s: %v", addr, err)
-		return err
-	}
-	s.addPeer(p)
-	s.MergeCluster(cluster)
-	slog.Infof("bootstrap %s[%s]: ok", p.info.Address, p.info.PeerName)
-	return nil
-}
-
 func (s *Server) Start() error {
 	cfg := s.cfg.Current()
 	timeout := time.Duration(cfg.Timeout) * time.Second
@@ -121,7 +108,7 @@ func (s *Server) Start() error {
 		go func() {
 			ctx := s.canceller.WithTimeout(timeout)
 			defer s.canceller.Cancel(ctx)
-			if err := s.bootstrap(ctx, p); err != nil {
+			if err := p.Bootstrap(ctx); err != nil {
 				slog.Error("start:", err)
 			}
 		}()
@@ -261,7 +248,7 @@ func (s *Server) maintenance() {
 			go func(p *peer) {
 				ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 				defer s.canceller.Cancel(ctx)
-				if err := s.bootstrap(ctx, p); err != nil {
+				if err := p.Bootstrap(ctx); err != nil {
 					slog.Errorf("redial %q: %v", p.info.PeerName, err)
 				}
 			}(p)

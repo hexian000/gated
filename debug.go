@@ -64,7 +64,7 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 			defer wg.Done()
 			name := p.info.PeerName
 			w := &bytes.Buffer{}
-			w.WriteString(fmt.Sprintf("%s: %v, %v\n", name, p.isConnected(), time.Since(p.lastSeen)))
+			w.WriteString(fmt.Sprintf("%s: %v, %v, %v\n", name, p.isReachable(), p.isConnected(), time.Since(p.lastSeen)))
 			ctx := h.s.canceller.WithTimeout(h.s.cfg.Timeout())
 			defer h.s.canceller.Cancel(ctx)
 			start := time.Now()
