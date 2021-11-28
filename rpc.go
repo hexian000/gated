@@ -54,6 +54,7 @@ func (p *peer) Call(ctx context.Context, method string, args interface{}, reply 
 		slog.Error("rpc call:", err)
 		return err
 	}
+	defer conn.Close()
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		deadline = time.Time{}
