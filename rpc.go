@@ -81,6 +81,7 @@ func (s *Server) Gossip(ctx context.Context, method string, args interface{}, re
 	if p == nil {
 		return errors.New("no connected peer")
 	}
+	slog.Debugf("gossip: calling %s", p.info.PeerName)
 	return p.Call(ctx, method, args, reply)
 }
 

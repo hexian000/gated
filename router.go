@@ -47,8 +47,9 @@ func NewRouter(domain string, defaultPeer string, server *Server, hosts map[stri
 		server:      server,
 	}
 	r.Transport = &http.Transport{
-		Proxy:       r.Proxy,
-		DialContext: r.DialContext,
+		Proxy:             r.Proxy,
+		DialContext:       r.DialContext,
+		DisableKeepAlives: true,
 	}
 	if defaultPeer != "" {
 		r.defaultProxy = r.makeURL(defaultPeer)
