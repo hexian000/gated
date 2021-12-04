@@ -123,9 +123,10 @@ type RPC struct {
 	peer   *peer
 }
 
-func (r *RPC) Bootstrap(args *proto.PeerInfo, reply *proto.Cluster) error {
+func (r *RPC) Bootstrap(args *proto.Cluster, reply *proto.Cluster) error {
 	slog.Verbosef("RPC.Bootstrap: %v", args)
-	r.peer.info = *args
+	r.peer.info = args.Self
+	r.server.MergeCluster(args)
 	go func(s *Server) {
 		ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 		defer s.canceller.Cancel(ctx)

@@ -193,10 +193,10 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 	if !ok {
 		deadline = time.Time{}
 	}
-	self := p.server.self()
-	slog.Verbosef("bootstrap %v: call RPC.Bootstrap: %v", connId, self)
+	bootstrapMsg := p.server.ClusterInfo()
+	slog.Verbosef("bootstrap %v: call RPC.Bootstrap: %v", connId, bootstrapMsg)
 	var cluster proto.Cluster
-	if err := p.call(conn, deadline, "RPC.Bootstrap", self, &cluster); err != nil {
+	if err := p.call(conn, deadline, "RPC.Bootstrap", bootstrapMsg, &cluster); err != nil {
 		return err
 	}
 	slog.Verbosef("bootstrap %v: reply: %v", connId, cluster)
