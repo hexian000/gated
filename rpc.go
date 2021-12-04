@@ -130,7 +130,7 @@ func (r *RPC) Bootstrap(args *proto.Cluster, reply *proto.Cluster) error {
 	go func(s *Server) {
 		ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 		defer s.canceller.Cancel(ctx)
-		for range s.Broadcast(ctx, "RPC.Update", args, reflect.TypeOf(proto.None{})) {
+		for range s.Broadcast(ctx, "RPC.Update", &r.peer.info, reflect.TypeOf(proto.None{})) {
 		}
 	}(r.server)
 	r.server.addPeer(r.peer)
