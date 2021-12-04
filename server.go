@@ -217,7 +217,8 @@ func (s *Server) serve(tcpConn net.Conn) {
 	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 	defer s.canceller.Cancel(ctx)
 	slog.Verbosef("serve %v: setup connection", connId)
-	tlsConn := tls.Server(tcpConn, s.cfg.tls)
+	meteredConn := util.Meter(tcpConn)
+	tlsConn := tls.Server(meteredConn, s.cfg.tls)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		slog.Errorf("serve %v: %v", connId, err)
 		_ = tcpConn.Close()
@@ -231,7 +232,14 @@ func (s *Server) serve(tcpConn net.Conn) {
 		return
 	}
 	p := newPeer(s)
-	p.Serve(muxConn)
+	func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.mux = muxConn
+		p.meter = meteredConn
+	}()
+	slog.Verbosef("serve %v: rpc online", muxConn.RemoteAddr())
+	p.serveAPI(muxConn)
 }
 
 func (s *Server) closeAllSessions() {
@@ -315,7 +323,12 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 
 	_, _ = w.WriteString("=== Peers ===\n\n")
 	for name, p := range s.getPeers() {
-		w.WriteString(fmt.Sprintf("%s: %v, %v, %v\n", name, p.isReachable(), p.isConnected(), time.Since(p.lastSeen)))
+		w.WriteString(fmt.Sprintf("%s:\n", name))
+		w.WriteString(fmt.Sprintf("    Reachable: %v\n", p.isReachable()))
+		w.WriteString(fmt.Sprintf("    Connected: %v\n", p.isConnected()))
+		w.WriteString(fmt.Sprintf("    LastSeen:  %v\n", time.Since(p.lastSeen)))
+		read, written := p.meter.Count()
+		w.WriteString(fmt.Sprintf("    Bandwidth: %v / %v\n", read, written))
 	}
 	_, _ = w.WriteString("\n")
 

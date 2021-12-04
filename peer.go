@@ -14,11 +14,13 @@ import (
 	"github.com/hashicorp/yamux"
 	"github.com/hexian000/gated/proto"
 	"github.com/hexian000/gated/slog"
+	"github.com/hexian000/gated/util"
 )
 
 type peer struct {
 	mu       sync.RWMutex
 	mux      *yamux.Session
+	meter    *util.MeteredConn
 	info     proto.PeerInfo
 	created  time.Time
 	lastSeen time.Time
@@ -135,16 +137,6 @@ func (p *peer) serveAPI(mux *yamux.Session) {
 	_ = server.Serve(mux)
 }
 
-func (p *peer) Serve(mux *yamux.Session) {
-	func() {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		p.mux = mux
-	}()
-	slog.Verbosef("serve %v: rpc online", mux.RemoteAddr())
-	p.serveAPI(mux)
-}
-
 func (p *peer) Bootstrap(ctx context.Context) error {
 	if !p.isReachable() {
 		return fmt.Errorf("peer %s is unreachable", p.info.PeerName)
@@ -164,8 +156,9 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 		slog.Errorf("bootstrap: %v", err)
 		return err
 	}
+	meteredConn := util.Meter(tcpConn)
 	connId := tcpConn.RemoteAddr()
-	tlsConn := tls.Client(tcpConn, p.server.cfg.TLSConfig(p.info.ServerName))
+	tlsConn := tls.Client(meteredConn, p.server.cfg.TLSConfig(p.info.ServerName))
 	err = tlsConn.HandshakeContext(ctx)
 	if err != nil {
 		_ = tcpConn.Close()
@@ -184,6 +177,7 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		p.mux = muxConn
+		p.meter = meteredConn
 	}()
 	conn, err := muxConn.Open()
 	if err != nil {
