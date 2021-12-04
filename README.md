@@ -8,7 +8,7 @@ gated is used for building HTTP proxy server clusters.
 
 Each peer can announce some host names (which are aliases of some local IP) in a global virtual domain, the cluster will forward the connections to proper peer.
 
-Peers without public IP address can also announce local services. In such case, another peer for reverse proxying must be specified.
+Peers without public IP address can also announce local services. In such case, another peer for reverse proxying will be chosen automatically.
 
 Traffic over untrusted network is carried by multiplexed mTLS tunnels.
 
@@ -29,7 +29,6 @@ Traffic over untrusted network is carried by multiplexed mTLS tunnels.
 
 ```
 +-------------------------------+
-|     Internal RPC stream &     |
 |          HTTP Proxy           |
 +-------------------------------+
 |   yamux stream multiplexing   |
@@ -61,76 +60,64 @@ gencerts.sh is in [cmd/gated](cmd/gated/gencerts.sh)
 
 ### 2. Create "config.json" per peer
 
-#### Peer1
+#### Peer1 (with public IP address 203.0.113.1)
 
 ```json
 {
-  "server": [
-    {
-      "listen": "0.0.0.0:12345"
+    "name": "peer1",
+    "listen": ":50100",
+    "addr": "203.0.113.1:50100",
+    "hosts": {
+        "server.lan": "127.0.0.1"
+    },
+    "auth": {
+        "cert": "peer1-cert.pem",
+        "key": "peer1-key.pem",
+        "authcerts": [
+            "peer2-cert.pem"
+        ]
     }
-  ],
-  "client": [
-    {
-      "listen": "127.0.0.1:8080",
-      "dial": "peer2.example.com:12345"
-    }
-  ],
-  "cert": "peer1-cert.pem",
-  "key": "peer1-key.pem",
-  "authcerts": [
-    "peer2-cert.pem"
-  ]
 }
 ```
 
-#### Peer2
+#### Peer2 (without public IP address)
 
 ```json
 {
-  "server": [
-    {
-      "listen": "0.0.0.0:12345"
-    }
-  ],
-  "client": [
-    {
-      "listen": "127.0.0.1:8080",
-      "dial": "peer1.example.com:12345",
-      "proxy": [
+    "name": "peer2",
+    "servers": [
         {
-          "listen": ":5201",
-          "forward": "gateway.peer1.lan:5201"
+            "addr": "203.0.113.1:50100"
         }
-      ]
+    ],
+    "hosts": {
+        "router.peer2.lan": "192.168.1.1",
+        "peer2.lan": "192.168.1.2"
+    },
+    "auth": {
+        "cert": "peer2-cert.pem",
+        "key": "peer2-key.pem",
+        "authcerts": [
+            "peer1-cert.pem"
+        ]
     }
-  ],
-  "cert": "peer2-cert.pem",
-  "key": "peer2-key.pem",
-  "authcerts": [
-    "peer1-cert.pem"
-  ]
 }
 ```
 
 #### Options
 
-- "server": TLS listener configs
-- "server[\*].listen": server bind address
-- "server[\*].forward": (optional) upstream TCP service address, leave empty or unconfigured to use builtin HTTP proxy
-- "client": TLS client configs
-- "client[\*].listen": proxy listen address
-- "client[\*].dial": server address
-- "client[\*].proxy": (optional) proxy forwarder configs
-- "client[\*].proxy[\*].listen": forwarder listen address
-- "client[\*].proxy[\*].forward": forwarder destination address
+- "name": peer name
+- "servers": bootstrap server info
+- "servers[\*].addr": bootstrap server address
+- "hosts": local hosts
+- "hosts[name]": host LAN address
 - "cert": peer certificate
 - "key": peer private key
 - "authcerts": peer authorized certificates list, bundles are supported
 
-see [source code](config.go) for complete document
+see [source code](config/config.go) for complete document
 
-see [config.json](config.json) for example config file
+see [config.json](config/config.json) for example config file
 
 ### 3. Start
 
