@@ -326,6 +326,7 @@ func (s *Server) watchdog() {
 }
 
 func (s *Server) CollectMetrics(w *bufio.Writer) {
+	now := time.Now()
 	(&metric.Runtime{}).CollectMetrics(w)
 	_, _ = w.WriteString("\n")
 
@@ -335,8 +336,15 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		w.WriteString(fmt.Sprintf("%s:\n", name))
 		w.WriteString(fmt.Sprintf("    Reachable:   %v\n", p.isReachable()))
 		w.WriteString(fmt.Sprintf("    Connected:   %v\n", connected))
-		w.WriteString(fmt.Sprintf("    LastUsed:    %v\n", time.Since(p.LastUsed())))
-		w.WriteString(fmt.Sprintf("    LastUpdated: %v\n", time.Since(p.LastUpdate())))
+		lastUsedStr, lastUpdatedStr := "never", "never"
+		if t := p.LastUsed(); t != (time.Time{}) {
+			lastUsedStr = now.Sub(t).String()
+		}
+		if t := p.LastUpdate(); t != (time.Time{}) {
+			lastUpdatedStr = now.Sub(t).String()
+		}
+		w.WriteString(fmt.Sprintf("    LastUsed:    %s\n", lastUsedStr))
+		w.WriteString(fmt.Sprintf("    LastUpdated: %s\n", lastUpdatedStr))
 		if connected {
 			read, written := p.meter.Count()
 			w.WriteString(fmt.Sprintf("    Bandwidth: %v / %v\n", read, written))
