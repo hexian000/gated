@@ -73,6 +73,12 @@ func (p *peer) checkNumStreams() {
 	}
 }
 
+func (p *peer) Created() time.Time {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.created
+}
+
 func (p *peer) LastUsed() time.Time {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

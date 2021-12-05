@@ -355,20 +355,21 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 
 	_, _ = w.WriteString("=== Peers ===\n\n")
 	for name, p := range s.getPeers() {
-		connected := p.isConnected()
 		w.WriteString(fmt.Sprintf("%s:\n", name))
 		w.WriteString(fmt.Sprintf("    HasAddress:  %v\n", p.hasAddress()))
-		w.WriteString(fmt.Sprintf("    Connected:   %v\n", connected))
-		lastUsedStr, lastUpdatedStr := "never", "never"
-		if t := p.LastUsed(); t != (time.Time{}) {
-			lastUsedStr = now.Sub(t).String()
-		}
+		lastUpdatedStr := "never"
 		if t := p.LastUpdate(); t != (time.Time{}) {
 			lastUpdatedStr = now.Sub(t).String()
 		}
-		w.WriteString(fmt.Sprintf("    LastUsed:    %s\n", lastUsedStr))
 		w.WriteString(fmt.Sprintf("    LastUpdated: %s\n", lastUpdatedStr))
-		if connected {
+		if p.isConnected() {
+			created := p.Created()
+			w.WriteString(fmt.Sprintf("    Connected:   %v (since %v)\n", now.Sub(created).String(), created))
+			lastUsedStr := "never"
+			if t := p.LastUsed(); t != (time.Time{}) {
+				lastUsedStr = now.Sub(t).String()
+			}
+			w.WriteString(fmt.Sprintf("    LastUsed:    %s\n", lastUsedStr))
 			read, written := p.meter.Count()
 			w.WriteString(fmt.Sprintf("    Bandwidth:   %v / %v\n", read, written))
 		}
