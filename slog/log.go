@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -30,7 +31,7 @@ var levelChar = [...]byte{
 type Logger struct {
 	out   io.Writer
 	mu    sync.Mutex
-	level int
+	level int32
 	buf   []byte
 }
 
@@ -41,9 +42,7 @@ func Default() *Logger {
 }
 
 func (l *Logger) SetLevel(level int) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.level = level
+	atomic.StoreInt32(&l.level, int32(level))
 }
 
 func (l *Logger) SetOutput(out io.Writer) {
@@ -54,11 +53,7 @@ func (l *Logger) SetOutput(out io.Writer) {
 
 func (l *Logger) Output(calldepth int, level int, s string) {
 	now := time.Now()
-	if func() bool {
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		return level < l.level
-	}() {
+	if level < int(atomic.LoadInt32(&l.level)) {
 		return
 	}
 	_, file, line, ok := runtime.Caller(calldepth)

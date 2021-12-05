@@ -18,12 +18,14 @@ import (
 )
 
 type peer struct {
-	mu       sync.RWMutex
-	mux      *yamux.Session
-	meter    *util.MeteredConn
-	info     proto.PeerInfo
-	created  time.Time
-	lastSeen time.Time
+	mu    sync.RWMutex
+	mux   *yamux.Session
+	meter *util.MeteredConn
+	info  proto.PeerInfo
+
+	created    time.Time
+	lastUsed   time.Time
+	lastUpdate time.Time
 
 	bootstrapCh chan struct{}
 
@@ -61,16 +63,29 @@ func (p *peer) checkNumStreams() {
 		return
 	}
 	if p.mux.NumStreams() > 0 {
-		p.lastSeen = time.Now()
+		p.lastUsed = time.Now()
 	}
 }
 
-func (p *peer) update(info *proto.PeerInfo) bool {
+func (p *peer) LastUsed() time.Time {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.lastUsed
+}
+
+func (p *peer) LastUpdate() time.Time {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.lastUpdate
+}
+
+func (p *peer) UpdateInfo(info *proto.PeerInfo) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.info.Timestamp < info.Timestamp {
 		slog.Debug("peer info update:", info)
 		p.info = *info
+		p.lastUpdate = time.Now()
 		return true
 	}
 	return false
@@ -87,7 +102,7 @@ func (p *peer) Open() (net.Conn, error) {
 	}
 	conn, err := p.mux.Open()
 	if err == nil {
-		p.lastSeen = time.Now()
+		p.lastUsed = time.Now()
 	}
 	return conn, err
 }
@@ -109,11 +124,7 @@ func (p *peer) DialContext(ctx context.Context) (net.Conn, error) {
 			return nil, errors.New("temporary failure, retry later")
 		}
 	}
-	conn, err := mux.Open()
-	if err == nil {
-		p.lastSeen = time.Now()
-	}
-	return conn, err
+	return mux.Open()
 }
 
 func (p *peer) newHandler() http.Handler {
@@ -156,8 +167,8 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 		slog.Errorf("bootstrap: %v", err)
 		return err
 	}
-	meteredConn := util.Meter(tcpConn)
 	connId := tcpConn.RemoteAddr()
+	meteredConn := util.Meter(tcpConn)
 	tlsConn := tls.Client(meteredConn, p.server.cfg.TLSConfig(p.info.ServerName))
 	err = tlsConn.HandshakeContext(ctx)
 	if err != nil {
@@ -194,7 +205,9 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 		return err
 	}
 	slog.Verbosef("bootstrap %v: reply: %v", connId, cluster)
-	p.lastSeen = time.Now()
+	now := time.Now()
+	p.lastUsed = now
+	p.lastUpdate = now
 	p.info = cluster.Self
 	slog.Infof("bootstrap %v: ok, remote peer: %s", connId, p.info.PeerName)
 	p.server.addPeer(p)

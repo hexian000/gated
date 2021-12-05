@@ -250,6 +250,12 @@ func (s *Server) closeAllSessions() {
 	}
 }
 
+const (
+	tickInterval    = 1 * time.Minute
+	updateInterval  = 2 * time.Hour
+	peerInfoTimeout = 24 * time.Hour
+)
+
 func (s *Server) maintenance() {
 	cfg := s.cfg.Current()
 	needRedial := cfg.AdvertiseAddr == ""
@@ -270,34 +276,35 @@ func (s *Server) maintenance() {
 				}
 			}(p)
 		}
-		if time.Since(p.lastSeen) > idleTimeout {
+		if time.Since(p.LastUsed()) > idleTimeout {
 			slog.Infof("idle timeout expired: %s", p.info.PeerName)
 			_ = p.Close()
+		}
+		if time.Since(p.LastUpdate()) > peerInfoTimeout {
+			slog.Infof("peer info timeout expired: %s", p.info.PeerName)
+			s.deletePeer(p.info.PeerName)
+			s.router.deletePeer(p.info.PeerName)
 		}
 	}
 }
 
-func (s *Server) sync() {
+func (s *Server) periodicUpdate() {
 	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 	defer s.canceller.Cancel(ctx)
 	var cluster proto.Cluster
-	err := s.Gossip(ctx, "RPC.Sync", s.ClusterInfo(), &cluster)
+	err := s.RandomCall(ctx, "RPC.Update", s.ClusterInfo(), &cluster)
 	if err != nil {
-		slog.Warning("gossip:", err)
+		slog.Warning("periodic:", err)
 	}
 	s.MergeCluster(&cluster)
-	slog.Debug("sync finished with", cluster.Self.PeerName)
+	slog.Debug("periodic: sync finished with", cluster.Self.PeerName)
 }
 
 func (s *Server) watchdog() {
-	const (
-		tickInterval = 1 * time.Minute
-		syncInterval = 2 * time.Hour
-	)
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
 	last := time.Now()
-	lastSync := last
+	lastUpdate := last
 	for {
 		select {
 		case <-ticker.C:
@@ -305,9 +312,9 @@ func (s *Server) watchdog() {
 			if now.Sub(last) > 2*tickInterval {
 				slog.Warning("system hang detected, closing all sessions")
 				s.closeAllSessions()
-			} else if now.Sub(lastSync) > syncInterval {
-				s.sync()
-				lastSync = now
+			} else if now.Sub(lastUpdate) > updateInterval {
+				s.periodicUpdate()
+				lastUpdate = now
 			}
 			last = now
 			s.maintenance()
@@ -326,7 +333,7 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		w.WriteString(fmt.Sprintf("%s:\n", name))
 		w.WriteString(fmt.Sprintf("    Reachable: %v\n", p.isReachable()))
 		w.WriteString(fmt.Sprintf("    Connected: %v\n", p.isConnected()))
-		w.WriteString(fmt.Sprintf("    LastSeen:  %v\n", time.Since(p.lastSeen)))
+		w.WriteString(fmt.Sprintf("    LastSeen:  %v\n", time.Since(p.lastUsed)))
 		read, written := p.meter.Count()
 		w.WriteString(fmt.Sprintf("    Bandwidth: %v / %v\n", read, written))
 	}

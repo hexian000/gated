@@ -80,6 +80,16 @@ func (r *Router) update(hosts []string, peer string) {
 	}
 }
 
+func (r *Router) deletePeer(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for host, peer := range r.routes {
+		if peer == name {
+			delete(r.routes, host)
+		}
+	}
+}
+
 func (r *Router) Routes() map[string]string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

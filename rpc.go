@@ -63,10 +63,8 @@ func (p *peer) Call(ctx context.Context, method string, args interface{}, reply 
 	return p.call(conn, deadline, method, args, reply)
 }
 
-func (s *Server) Gossip(ctx context.Context, method string, args interface{}, reply interface{}) error {
+func (s *Server) RandomCall(ctx context.Context, method string, args interface{}, reply interface{}) error {
 	p := func() *peer {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
 		set := make([]*peer, 0)
 		for _, p := range s.getPeers() {
 			if p.isReachable() || p.isConnected() {
@@ -81,7 +79,7 @@ func (s *Server) Gossip(ctx context.Context, method string, args interface{}, re
 	if p == nil {
 		return errors.New("no connected peer")
 	}
-	slog.Debugf("gossip: calling %s", p.info.PeerName)
+	slog.Debugf("ramdom calling %s", p.info.PeerName)
 	return p.Call(ctx, method, args, reply)
 }
 
@@ -128,35 +126,37 @@ func (r *RPC) Bootstrap(args *proto.Cluster, reply *proto.Cluster) error {
 	r.peer.info = args.Self
 	r.server.MergeCluster(args)
 	go func(s *Server) {
+		info := s.ClusterInfo()
 		ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 		defer s.canceller.Cancel(ctx)
-		for range s.Broadcast(ctx, "RPC.Update", &r.peer.info, reflect.TypeOf(proto.None{})) {
+		var cluster proto.Cluster
+		if err := s.RandomCall(ctx, "RPC.Update", info, &cluster); err != nil {
+			slog.Debugf("call RPC.Update: %v", err)
+			return
 		}
+		s.MergeCluster(&cluster)
 	}(r.server)
 	r.server.addPeer(r.peer)
 	*reply = *r.server.ClusterInfo()
 	return nil
 }
 
-func (r *RPC) Update(args *proto.PeerInfo, reply *proto.None) error {
+func (r *RPC) Update(args *proto.Cluster, reply *proto.Cluster) error {
 	slog.Verbosef("RPC.Update: %v", args)
-	if args.PeerName == r.server.LocalPeerName() {
-		return nil
-	}
-	if r.server.Update(args) {
+	if r.server.Update(&args.Self) {
 		go func(s *Server) {
 			ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 			defer s.canceller.Cancel(ctx)
-			for range s.Broadcast(ctx, "RPC.Update", args, reflect.TypeOf(proto.None{})) {
+			for call := range s.Broadcast(ctx, "RPC.Update", args, reflect.TypeOf(proto.Cluster{})) {
+				if call.err != nil {
+					slog.Debugf("call RPC.Update: %v", call.err)
+					continue
+				}
+				s.MergeCluster(call.reply.(*proto.Cluster))
 			}
 		}(r.server)
+		r.server.MergeCluster(args)
 	}
-	return nil
-}
-
-func (r *RPC) Sync(args *proto.Cluster, reply *proto.Cluster) error {
-	slog.Verbosef("RPC.Sync: %v", args)
-	r.server.MergeCluster(args)
 	*reply = *r.server.ClusterInfo()
 	return nil
 }
