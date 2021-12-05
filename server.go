@@ -323,18 +323,6 @@ func (s *Server) maintenance() {
 	}
 }
 
-func (s *Server) periodicUpdate() {
-	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
-	defer s.canceller.Cancel(ctx)
-	var cluster proto.Cluster
-	err := s.RandomCall(ctx, "RPC.Update", s.ClusterInfo(), &cluster)
-	if err != nil {
-		slog.Warning("periodic:", err)
-	}
-	s.MergeCluster(&cluster)
-	slog.Debug("periodic: sync finished with", cluster.Self.PeerName)
-}
-
 func (s *Server) watchdog() {
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
@@ -348,7 +336,8 @@ func (s *Server) watchdog() {
 				slog.Warning("system hang detected, closing all sessions")
 				s.closeAllSessions()
 			} else if now.Sub(lastUpdate) > updateInterval {
-				s.periodicUpdate()
+				slog.Debug("periodic: update")
+				go s.broatcastUpdate(s.ClusterInfo())
 				lastUpdate = now
 			}
 			last = now

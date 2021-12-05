@@ -27,8 +27,6 @@ type peer struct {
 	lastUsed   time.Time
 	lastUpdate time.Time
 
-	gone bool
-
 	bootstrapCh chan struct{}
 
 	server   *Server
