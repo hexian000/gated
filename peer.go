@@ -161,6 +161,7 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 	}
 
 	slog.Verbosef("bootstrap: setup connection to %s", p.info.Address)
+	setupBegin := time.Now()
 	dialer := net.Dialer{}
 	tcpConn, err := dialer.DialContext(ctx, network, p.info.Address)
 	if err != nil {
@@ -209,7 +210,7 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 	p.lastUsed = now
 	p.lastUpdate = now
 	p.info = cluster.Self
-	slog.Infof("bootstrap %v: ok, remote peer: %s", connId, p.info.PeerName)
+	slog.Infof("dial %v: ok, remote name: %s, setup: %v", connId, p.info.PeerName, time.Since(setupBegin))
 	p.server.addPeer(p)
 	p.server.MergeCluster(&cluster)
 	return nil

@@ -32,8 +32,6 @@ type Server struct {
 	httpServer *http.Server
 	httpClient *http.Client
 
-	bootstrapDone bool
-
 	tlsListener  net.Listener
 	httpListener net.Listener
 
@@ -219,6 +217,7 @@ func (s *Server) serve(tcpConn net.Conn) {
 	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 	defer s.canceller.Cancel(ctx)
 	slog.Verbosef("serve %v: setup connection", connId)
+	setupBegin := time.Now()
 	meteredConn := util.Meter(tcpConn)
 	tlsConn := tls.Server(meteredConn, s.cfg.tls)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
@@ -240,7 +239,7 @@ func (s *Server) serve(tcpConn net.Conn) {
 		p.mux = muxConn
 		p.meter = meteredConn
 	}()
-	slog.Verbosef("serve %v: rpc online", muxConn.RemoteAddr())
+	slog.Infof("serve %v: rpc online, setup: %v", connId, time.Since(setupBegin))
 	p.serveAPI(muxConn)
 }
 
