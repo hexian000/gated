@@ -347,7 +347,7 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		w.WriteString(fmt.Sprintf("    LastUpdated: %s\n", lastUpdatedStr))
 		if connected {
 			read, written := p.meter.Count()
-			w.WriteString(fmt.Sprintf("    Bandwidth: %v / %v\n", read, written))
+			w.WriteString(fmt.Sprintf("    Bandwidth:   %v / %v\n", read, written))
 		}
 	}
 	_, _ = w.WriteString("\n")
