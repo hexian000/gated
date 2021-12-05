@@ -333,9 +333,10 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 	for name, p := range s.getPeers() {
 		connected := p.isConnected()
 		w.WriteString(fmt.Sprintf("%s:\n", name))
-		w.WriteString(fmt.Sprintf("    Reachable: %v\n", p.isReachable()))
-		w.WriteString(fmt.Sprintf("    Connected: %v\n", connected))
-		w.WriteString(fmt.Sprintf("    LastSeen:  %v\n", time.Since(p.lastUsed)))
+		w.WriteString(fmt.Sprintf("    Reachable:   %v\n", p.isReachable()))
+		w.WriteString(fmt.Sprintf("    Connected:   %v\n", connected))
+		w.WriteString(fmt.Sprintf("    LastUsed:    %v\n", time.Since(p.LastUsed())))
+		w.WriteString(fmt.Sprintf("    LastUpdated: %v\n", time.Since(p.LastUpdate())))
 		if connected {
 			read, written := p.meter.Count()
 			w.WriteString(fmt.Sprintf("    Bandwidth: %v / %v\n", read, written))

@@ -124,7 +124,15 @@ func (p *peer) DialContext(ctx context.Context) (net.Conn, error) {
 			return nil, errors.New("temporary failure, retry later")
 		}
 	}
-	return mux.Open()
+	conn, err := mux.Open()
+	if err == nil {
+		func() {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			p.lastUsed = time.Now()
+		}()
+	}
+	return conn, err
 }
 
 func (p *peer) newHandler() http.Handler {
