@@ -27,6 +27,8 @@ type peer struct {
 	lastUsed   time.Time
 	lastUpdate time.Time
 
+	gone bool
+
 	bootstrapCh chan struct{}
 
 	server   *Server
@@ -230,6 +232,15 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 	p.server.addPeer(p)
 	p.server.MergeCluster(&cluster)
 	return nil
+}
+
+func (p *peer) GoAway() (err error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.mux != nil {
+		err = p.mux.GoAway()
+	}
+	return
 }
 
 func (p *peer) Close() (err error) {

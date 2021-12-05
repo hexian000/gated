@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -131,18 +130,38 @@ func (s *Server) Start() error {
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	close(s.shutdownCh)
-	s.broatcastUpdate(s.ClusterInfo())
 	func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if s.httpListener != nil {
 			_ = s.httpListener.Close()
+			s.httpListener = nil
 		}
 		if s.tlsListener != nil {
 			_ = s.tlsListener.Close()
+			s.tlsListener = nil
 		}
 	}()
-	return errors.New("TODO")
+	for _, p := range s.getPeers() {
+		_ = p.GoAway()
+	}
+	s.canceller.CancelAll()
+	for call := range s.Broadcast(ctx, "RPC.Update", s.ClusterInfo(), reflect.TypeOf(proto.Cluster{})) {
+		if call.err != nil {
+			slog.Debugf("call RPC.Update: %v", call.err)
+			continue
+		}
+	}
+	s.forwarder.Shutdown()
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for name, p := range s.peers {
+			_ = p.Close()
+			delete(s.peers, name)
+		}
+	}()
+	return nil
 }
 
 func (s *Server) findProxy(peer string) (*peer, error) {
