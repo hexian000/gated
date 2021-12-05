@@ -292,16 +292,14 @@ const (
 
 func (s *Server) maintenance() {
 	cfg := s.cfg.Current()
-	noAddr := cfg.AdvertiseAddr == ""
+	selfHasAddr := cfg.AdvertiseAddr != ""
 	idleTimeout := time.Duration(cfg.Transport.IdleTimeout) * time.Second
 	for _, p := range s.getPeers() {
-		if !p.hasAddress() {
-			continue
-		}
 		info := p.PeerInfo()
 		if p.isConnected() {
 			p.checkNumStreams()
-		} else if info.Online && (noAddr || info.Timestamp == 0) {
+		} else if info.Online && info.Address != "" &&
+			(!selfHasAddr || info.Timestamp == 0) {
 			slog.Infof("redial %q: %q", info.PeerName, info.Address)
 			go func(p *peer) {
 				ctx := s.canceller.WithTimeout(s.cfg.Timeout())
@@ -311,7 +309,8 @@ func (s *Server) maintenance() {
 				}
 			}(p)
 		}
-		if time.Since(p.LastUsed()) > idleTimeout {
+		if (selfHasAddr && info.Address != "") &&
+			time.Since(p.LastUsed()) > idleTimeout {
 			slog.Infof("idle timeout expired: %s", info.PeerName)
 			_ = p.Close()
 		}
