@@ -162,9 +162,15 @@ func (p *peer) serveAPI(mux *yamux.Session) {
 	_ = server.Serve(mux)
 }
 
+func (p *peer) isDirectReachable() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.info.Online && (p.info.Address != "" || (p.mux != nil && !p.mux.IsClosed()))
+}
+
 func (p *peer) Bootstrap(ctx context.Context) error {
 	info := p.PeerInfo()
-	if !info.Online || !p.hasAddress() {
+	if !p.isDirectReachable() {
 		return fmt.Errorf("peer %s is unreachable", info.PeerName)
 	}
 	p.bootstrapCh <- struct{}{}
