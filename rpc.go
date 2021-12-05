@@ -93,9 +93,6 @@ func (s *Server) Broadcast(ctx context.Context, method string, args interface{},
 	wg := sync.WaitGroup{}
 	ch := make(chan rpcResult, 10)
 	for name, p := range s.getPeers() {
-		if !p.isDirectReachable() {
-			continue
-		}
 		wg.Add(1)
 		go func(name string, p *peer) {
 			defer wg.Done()
