@@ -18,7 +18,12 @@ func (s *Server) self() *proto.PeerInfo {
 	for host := range cfg.Hosts {
 		hosts = append(hosts, host)
 	}
-	_, online := <-s.shutdownCh
+	online := true
+	select {
+	case <-s.shutdownCh:
+		online = false
+	default:
+	}
 	return &proto.PeerInfo{
 		Timestamp:  NewTimestamp(),
 		PeerName:   cfg.Name,
