@@ -42,6 +42,7 @@ func (s *Server) getPeer(name string) *peer {
 
 func (s *Server) addPeer(peer *peer) {
 	name := peer.info.PeerName
+	slog.Infof("add peer: %s", name)
 	func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
