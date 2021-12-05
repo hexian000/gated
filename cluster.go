@@ -18,9 +18,11 @@ func (s *Server) self() *proto.PeerInfo {
 	for host := range cfg.Hosts {
 		hosts = append(hosts, host)
 	}
+	_, online := <-s.shutdownCh
 	return &proto.PeerInfo{
 		Timestamp:  NewTimestamp(),
 		PeerName:   cfg.Name,
+		Online:     online,
 		ServerName: cfg.ServerName,
 		Address:    cfg.AdvertiseAddr,
 		Hosts:      hosts,

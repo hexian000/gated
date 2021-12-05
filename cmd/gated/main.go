@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"io/ioutil"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/hexian000/gated"
 	"github.com/hexian000/gated/config"
@@ -117,9 +119,11 @@ func main() {
 		slog.Info("config successfully reloaded")
 	}
 
-	// if err := server.Shutdown(); err != nil {
-	// 	slog.Fatal("server shutdown:", err)
-	// 	os.Exit(1)
-	// }
-	// slog.Info("server stopped gracefully")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		slog.Fatal("server shutdown:", err)
+		os.Exit(1)
+	}
+	slog.Info("server stopped gracefully")
 }

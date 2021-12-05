@@ -44,7 +44,7 @@ func newPeer(s *Server) *peer {
 	}
 }
 
-func (p *peer) isReachable() bool {
+func (p *peer) hasAddress() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.info.Address != ""
@@ -54,6 +54,12 @@ func (p *peer) isConnected() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.mux != nil && !p.mux.IsClosed()
+}
+
+func (p *peer) PeerInfo() proto.PeerInfo {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.info
 }
 
 func (p *peer) checkNumStreams() {
@@ -157,8 +163,9 @@ func (p *peer) serveAPI(mux *yamux.Session) {
 }
 
 func (p *peer) Bootstrap(ctx context.Context) error {
-	if !p.isReachable() {
-		return fmt.Errorf("peer %s is unreachable", p.info.PeerName)
+	info := p.PeerInfo()
+	if !info.Online || !p.hasAddress() {
+		return fmt.Errorf("peer %s is unreachable", info.PeerName)
 	}
 	p.bootstrapCh <- struct{}{}
 	defer func() {
@@ -168,17 +175,17 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 		return nil
 	}
 
-	slog.Verbosef("bootstrap: setup connection to %s", p.info.Address)
+	slog.Verbosef("bootstrap: setup connection to %s", info.Address)
 	setupBegin := time.Now()
 	dialer := net.Dialer{}
-	tcpConn, err := dialer.DialContext(ctx, network, p.info.Address)
+	tcpConn, err := dialer.DialContext(ctx, network, info.Address)
 	if err != nil {
 		slog.Errorf("bootstrap: %v", err)
 		return err
 	}
 	connId := tcpConn.RemoteAddr()
 	meteredConn := util.Meter(tcpConn)
-	tlsConn := tls.Client(meteredConn, p.server.cfg.TLSConfig(p.info.ServerName))
+	tlsConn := tls.Client(meteredConn, p.server.cfg.TLSConfig(info.ServerName))
 	err = tlsConn.HandshakeContext(ctx)
 	if err != nil {
 		_ = tcpConn.Close()
@@ -192,13 +199,6 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 		slog.Errorf("bootstrap %v: %v", connId, err)
 		return err
 	}
-	go p.serveAPI(muxConn)
-	func() {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		p.mux = muxConn
-		p.meter = meteredConn
-	}()
 	conn, err := muxConn.Open()
 	if err != nil {
 		return err
@@ -214,11 +214,19 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 		return err
 	}
 	slog.Verbosef("bootstrap %v: reply: %v", connId, cluster)
-	now := time.Now()
-	p.lastUsed = now
-	p.lastUpdate = now
-	p.info = cluster.Self
-	slog.Infof("dial %v: ok, remote name: %s, setup: %v", connId, p.info.PeerName, time.Since(setupBegin))
+	info = cluster.Self
+	go p.serveAPI(muxConn)
+	func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		now := time.Now()
+		p.mux = muxConn
+		p.meter = meteredConn
+		p.lastUsed = now
+		p.lastUpdate = now
+		p.info = info
+	}()
+	slog.Infof("dial %v: ok, remote name: %s, setup: %v", connId, info.PeerName, time.Since(setupBegin))
 	p.server.addPeer(p)
 	p.server.MergeCluster(&cluster)
 	return nil

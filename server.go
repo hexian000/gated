@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -105,6 +106,7 @@ func (s *Server) Start() error {
 		p := newPeer(s)
 		p.info.Address = server.Address
 		p.info.ServerName = server.ServerName
+		p.info.Online = true
 		go func() {
 			ctx := s.canceller.WithTimeout(timeout)
 			defer s.canceller.Cancel(ctx)
@@ -127,8 +129,20 @@ func (s *Server) Start() error {
 	return nil
 }
 
-func (s *Server) Shutdown(ctx context.Context) {
-	panic("TODO")
+func (s *Server) Shutdown(ctx context.Context) error {
+	close(s.shutdownCh)
+	s.broatcastUpdate(s.ClusterInfo())
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.httpListener != nil {
+			_ = s.httpListener.Close()
+		}
+		if s.tlsListener != nil {
+			_ = s.tlsListener.Close()
+		}
+	}()
+	return errors.New("TODO")
 }
 
 func (s *Server) findProxy(peer string) (*peer, error) {
@@ -191,7 +205,7 @@ func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, er
 		return conn, err
 	}
 	p := s.getPeer(peer)
-	if p != nil && p.isReachable() {
+	if p != nil && p.hasAddress() {
 		// prefer direct
 		conn, err := p.DialContext(ctx)
 		if err == nil {
@@ -262,29 +276,30 @@ func (s *Server) maintenance() {
 	noAddr := cfg.AdvertiseAddr == ""
 	idleTimeout := time.Duration(cfg.Transport.IdleTimeout) * time.Second
 	for _, p := range s.getPeers() {
-		if !p.isReachable() {
+		if !p.hasAddress() {
 			continue
 		}
+		info := p.PeerInfo()
 		if p.isConnected() {
 			p.checkNumStreams()
-		} else if noAddr || p.info.Timestamp == 0 {
-			slog.Infof("redial %q: %q", p.info.PeerName, p.info.Address)
+		} else if info.Online && (noAddr || info.Timestamp == 0) {
+			slog.Infof("redial %q: %q", info.PeerName, info.Address)
 			go func(p *peer) {
 				ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 				defer s.canceller.Cancel(ctx)
 				if err := p.Bootstrap(ctx); err != nil {
-					slog.Errorf("redial %q: %v", p.info.PeerName, err)
+					slog.Errorf("redial %q: %v", info.PeerName, err)
 				}
 			}(p)
 		}
 		if time.Since(p.LastUsed()) > idleTimeout {
-			slog.Infof("idle timeout expired: %s", p.info.PeerName)
+			slog.Infof("idle timeout expired: %s", info.PeerName)
 			_ = p.Close()
 		}
 		if time.Since(p.LastUpdate()) > peerInfoTimeout {
-			slog.Infof("peer info timeout expired: %s", p.info.PeerName)
-			s.deletePeer(p.info.PeerName)
-			s.router.deletePeer(p.info.PeerName)
+			slog.Infof("peer info timeout expired: %s", info.PeerName)
+			s.deletePeer(info.PeerName)
+			s.router.deletePeer(info.PeerName)
 		}
 	}
 }
@@ -334,7 +349,7 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 	for name, p := range s.getPeers() {
 		connected := p.isConnected()
 		w.WriteString(fmt.Sprintf("%s:\n", name))
-		w.WriteString(fmt.Sprintf("    Reachable:   %v\n", p.isReachable()))
+		w.WriteString(fmt.Sprintf("    HasAddress:  %v\n", p.hasAddress()))
 		w.WriteString(fmt.Sprintf("    Connected:   %v\n", connected))
 		lastUsedStr, lastUpdatedStr := "never", "never"
 		if t := p.LastUsed(); t != (time.Time{}) {

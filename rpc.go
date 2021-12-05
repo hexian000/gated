@@ -67,7 +67,7 @@ func (s *Server) RandomCall(ctx context.Context, method string, args interface{}
 	p := func() *peer {
 		set := make([]*peer, 0)
 		for _, p := range s.getPeers() {
-			if p.isReachable() || p.isConnected() {
+			if p.hasAddress() || p.isConnected() {
 				set = append(set, p)
 			}
 		}
