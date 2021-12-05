@@ -125,17 +125,7 @@ func (r *RPC) Bootstrap(args *proto.Cluster, reply *proto.Cluster) error {
 	slog.Verbosef("RPC.Bootstrap: %v", args)
 	r.peer.info = args.Self
 	r.server.MergeCluster(args)
-	go func(s *Server) {
-		info := s.ClusterInfo()
-		ctx := s.canceller.WithTimeout(s.cfg.Timeout())
-		defer s.canceller.Cancel(ctx)
-		var cluster proto.Cluster
-		if err := s.RandomCall(ctx, "RPC.Update", info, &cluster); err != nil {
-			slog.Debugf("call RPC.Update: %v", err)
-			return
-		}
-		s.MergeCluster(&cluster)
-	}(r.server)
+	go r.server.broatcastUpdate(args)
 	r.server.addPeer(r.peer)
 	*reply = *r.server.ClusterInfo()
 	return nil
@@ -144,17 +134,7 @@ func (r *RPC) Bootstrap(args *proto.Cluster, reply *proto.Cluster) error {
 func (r *RPC) Update(args *proto.Cluster, reply *proto.Cluster) error {
 	slog.Verbosef("RPC.Update: %v", args)
 	if r.server.Update(&args.Self) {
-		go func(s *Server) {
-			ctx := s.canceller.WithTimeout(s.cfg.Timeout())
-			defer s.canceller.Cancel(ctx)
-			for call := range s.Broadcast(ctx, "RPC.Update", args, reflect.TypeOf(proto.Cluster{})) {
-				if call.err != nil {
-					slog.Debugf("call RPC.Update: %v", call.err)
-					continue
-				}
-				s.MergeCluster(call.reply.(*proto.Cluster))
-			}
-		}(r.server)
+		go r.server.broatcastUpdate(args)
 		r.server.MergeCluster(args)
 	}
 	*reply = *r.server.ClusterInfo()

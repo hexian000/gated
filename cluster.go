@@ -1,6 +1,7 @@
 package gated
 
 import (
+	"reflect"
 	"time"
 
 	"github.com/hexian000/gated/proto"
@@ -112,4 +113,16 @@ func (s *Server) MergeCluster(cluster *proto.Cluster) {
 		s.Update(&info)
 	}
 	s.router.merge(cluster.Routes)
+}
+
+func (s *Server) broatcastUpdate(args *proto.Cluster) {
+	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
+	defer s.canceller.Cancel(ctx)
+	for call := range s.Broadcast(ctx, "RPC.Update", args, reflect.TypeOf(proto.Cluster{})) {
+		if call.err != nil {
+			slog.Debugf("call RPC.Update: %v", call.err)
+			continue
+		}
+		s.MergeCluster(call.reply.(*proto.Cluster))
+	}
 }
