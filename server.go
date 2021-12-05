@@ -32,6 +32,8 @@ type Server struct {
 	httpServer *http.Server
 	httpClient *http.Client
 
+	bootstrapDone bool
+
 	tlsListener  net.Listener
 	httpListener net.Listener
 
@@ -258,7 +260,7 @@ const (
 
 func (s *Server) maintenance() {
 	cfg := s.cfg.Current()
-	needRedial := cfg.AdvertiseAddr == ""
+	noAddr := cfg.AdvertiseAddr == ""
 	idleTimeout := time.Duration(cfg.Transport.IdleTimeout) * time.Second
 	for _, p := range s.getPeers() {
 		if !p.isReachable() {
@@ -266,7 +268,7 @@ func (s *Server) maintenance() {
 		}
 		if p.isConnected() {
 			p.checkNumStreams()
-		} else if needRedial {
+		} else if noAddr || p.info.Timestamp == 0 {
 			slog.Infof("redial %q: %q", p.info.PeerName, p.info.Address)
 			go func(p *peer) {
 				ctx := s.canceller.WithTimeout(s.cfg.Timeout())
