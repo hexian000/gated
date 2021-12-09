@@ -316,8 +316,8 @@ func (s *Server) maintenance() {
 		}
 		if time.Since(p.LastUpdate()) > peerInfoTimeout {
 			slog.Infof("peer info timeout expired: %s", info.PeerName)
-			s.deletePeer(info.PeerName)
-			s.router.deletePeer(info.PeerName)
+			// s.deletePeer(info.PeerName)
+			// s.router.deletePeer(info.PeerName)
 		}
 	}
 }
