@@ -279,8 +279,8 @@ func (s *Server) serve(tcpConn net.Conn) {
 func (s *Server) closeAllSessions() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, peer := range s.peers {
-		_ = peer.Close()
+	for _, p := range s.peers {
+		_ = p.Close()
 	}
 }
 
@@ -332,9 +332,14 @@ func (s *Server) watchdog() {
 		case <-ticker.C:
 			now := time.Now()
 			if now.Sub(last) > 2*tickInterval {
-				slog.Warning("system hang detected, closing all sessions")
+				slog.Warning("system hang detected, tick time:", now.Sub(last))
 				s.closeAllSessions()
-			} else if now.Sub(lastUpdate) > updateInterval {
+				go s.broatcastUpdate(s.ClusterInfo())
+				lastUpdate = now
+				last = now
+				continue
+			}
+			if now.Sub(lastUpdate) > updateInterval {
 				slog.Debug("periodic: update")
 				go s.broatcastUpdate(s.ClusterInfo())
 				lastUpdate = now
