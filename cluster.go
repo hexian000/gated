@@ -90,37 +90,30 @@ func (s *Server) ClusterInfo() *proto.Cluster {
 }
 
 func (s *Server) updatePeerInfo(info *proto.PeerInfo) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if p, ok := s.peers[info.PeerName]; ok {
+	if info.PeerName == s.LocalPeerName() {
+		return false
+	}
+	if p := s.getPeer(info.PeerName); p != nil {
 		return p.UpdateInfo(info)
 	}
 	slog.Debug("peer info add:", info)
 	p := newPeer(s)
 	p.info = *info
-	s.peers[info.PeerName] = p
+	s.addPeer(p)
 	return true
 }
 
-func (s *Server) Update(info *proto.PeerInfo) bool {
-	if info.PeerName == s.LocalPeerName() {
-		return false
-	}
-	if s.updatePeerInfo(info) {
-		s.router.update(info.Hosts, info.PeerName)
-		return true
-	}
-	return false
-}
-
-func (s *Server) MergeCluster(cluster *proto.Cluster) {
-	if s.Update(&cluster.Self) {
+func (s *Server) MergeCluster(cluster *proto.Cluster) bool {
+	changed := false
+	if s.updatePeerInfo(&cluster.Self) {
+		changed = true
 		s.router.update(cluster.Self.Hosts, cluster.Self.PeerName)
 	}
 	for _, info := range cluster.Peers {
-		s.Update(&info)
+		changed = changed || s.updatePeerInfo(&info)
 	}
 	s.router.merge(cluster.Routes)
+	return changed
 }
 
 func (s *Server) broatcastUpdate(args *proto.Cluster) {

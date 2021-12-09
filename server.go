@@ -298,8 +298,7 @@ func (s *Server) maintenance() {
 		info := p.PeerInfo()
 		if p.isConnected() {
 			p.checkNumStreams()
-		} else if info.Online && info.Address != "" &&
-			(!selfHasAddr || info.Timestamp == 0) {
+		} else if !selfHasAddr && info.Online && info.Address != "" {
 			slog.Infof("redial %q: %q", info.PeerName, info.Address)
 			go func(p *peer) {
 				ctx := s.canceller.WithTimeout(s.cfg.Timeout())

@@ -133,9 +133,8 @@ func (r *RPC) Bootstrap(args *proto.Cluster, reply *proto.Cluster) error {
 
 func (r *RPC) Update(args *proto.Cluster, reply *proto.Cluster) error {
 	slog.Verbosef("RPC.Update: %v", args)
-	if r.server.Update(&args.Self) {
+	if r.server.MergeCluster(args) {
 		go r.server.broatcastUpdate(args)
-		r.server.MergeCluster(args)
 	}
 	*reply = *r.server.ClusterInfo()
 	return nil
