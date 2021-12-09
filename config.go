@@ -119,11 +119,11 @@ func (c *Config) Current() *config.Main {
 }
 
 func (c *Config) Timeout() time.Duration {
-	return time.Duration(c.Current().Timeout) * time.Second
+	return time.Duration(c.Current().Transport.Timeout) * time.Second
 }
 
 func (c *Config) CacheTimeout() time.Duration {
-	return time.Duration(c.Current().CacheTimeout) * time.Second
+	return time.Duration(c.Current().Routes.CacheTimeout) * time.Second
 }
 
 func (c *Config) GetFQDN(host string) string {

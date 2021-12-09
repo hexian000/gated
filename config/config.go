@@ -18,13 +18,18 @@ type Transport struct {
 	Timeout           int    `json:"timeout"`
 	WriteTimeout      int    `json:"writetimeout"`
 	IdleTimeout       int    `json:"idletimeout"`
-	CacheTimeout      int    `json:"cachetimeout"`
 	StreamWindow      uint32 `json:"window"`
 }
 
 type Server struct {
 	ServerName string `json:"sni"`
 	Address    string `json:"addr"`
+}
+
+type Routes struct {
+	CacheTimeout int      `json:"cachetimeout"`
+	Rules        []string `json:"rules"`
+	Default      string   `json:"default"`
 }
 
 type Main struct {
@@ -36,10 +41,10 @@ type Main struct {
 	AdvertiseAddr string            `json:"addr"`
 	Servers       []Server          `json:"servers"`
 	Hosts         map[string]string `json:"hosts"`
-	DefaultRoute  string            `json:"default"`
 
-	Auth      `json:"auth"`
-	Transport `json:"transport"`
+	Routes    Routes    `json:"routes"`
+	Auth      Auth      `json:"auth"`
+	Transport Transport `json:"transport"`
 
 	UDPLog string `json:"udplog"`
 }
@@ -48,6 +53,9 @@ func New() *Main {
 	return &Main{
 		Domain:     "lan",
 		ServerName: "example.com",
+		Routes: Routes{
+			CacheTimeout: 15 * 60,
+		},
 		Transport: Transport{
 			NoDelay:           false,
 			Linger:            15,
@@ -55,7 +63,6 @@ func New() *Main {
 			Timeout:           15,
 			WriteTimeout:      15,
 			IdleTimeout:       15 * 60,
-			CacheTimeout:      15 * 60,
 			StreamWindow:      256 * 1024,
 		},
 	}

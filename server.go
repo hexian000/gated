@@ -61,7 +61,7 @@ func NewServer(cfg *Config) *Server {
 		},
 	}
 	s.handler = newAPIHandler(s, nil)
-	s.router = NewRouter(cfg.main.Domain, cfg.main.DefaultRoute, s, cfg.main.Hosts)
+	s.router = NewRouter(cfg.main.Domain, cfg.main.Routes.Default, s, cfg.main.Hosts)
 	s.httpServer.Handler = s.handler
 	s.httpClient = &http.Client{
 		Transport: s.router.Transport,
@@ -90,7 +90,7 @@ func (s *Server) LocalPeerName() string {
 
 func (s *Server) Start() error {
 	cfg := s.cfg.Current()
-	timeout := time.Duration(cfg.Timeout) * time.Second
+	timeout := time.Duration(cfg.Transport.Timeout) * time.Second
 	if cfg.Listen != "" {
 		slog.Info("tls listen:", cfg.Listen)
 		l, err := net.Listen(network, cfg.Listen)
