@@ -88,19 +88,9 @@ func (s *Server) LocalPeerName() string {
 	return s.cfg.Current().Name
 }
 
-func (s *Server) Start() error {
+func (s *Server) BootstrapFromConfig() {
 	cfg := s.cfg.Current()
 	timeout := time.Duration(cfg.Transport.Timeout) * time.Second
-	if cfg.Listen != "" {
-		slog.Info("tls listen:", cfg.Listen)
-		l, err := net.Listen(network, cfg.Listen)
-		if err != nil {
-			slog.Error("listen:", err)
-			return err
-		}
-		s.tlsListener = l
-		go s.Serve(l)
-	}
 	for _, server := range cfg.Servers {
 		p := newPeer(s)
 		p.info.Address = server.Address
@@ -114,6 +104,21 @@ func (s *Server) Start() error {
 			}
 		}()
 	}
+}
+
+func (s *Server) Start() error {
+	cfg := s.cfg.Current()
+	if cfg.Listen != "" {
+		slog.Info("tls listen:", cfg.Listen)
+		l, err := net.Listen(network, cfg.Listen)
+		if err != nil {
+			slog.Error("listen:", err)
+			return err
+		}
+		s.tlsListener = l
+		go s.Serve(l)
+	}
+	s.BootstrapFromConfig()
 	if cfg.HTTPListen != "" {
 		slog.Info("http listen:", cfg.HTTPListen)
 		l, err := net.Listen(network, cfg.HTTPListen)
@@ -294,10 +299,18 @@ func (s *Server) maintenance() {
 	cfg := s.cfg.Current()
 	selfHasAddr := cfg.AdvertiseAddr != ""
 	idleTimeout := time.Duration(cfg.Transport.IdleTimeout) * time.Second
+	connectedCount := 0
 	for _, p := range s.getPeers() {
 		info := p.PeerInfo()
 		if p.isConnected() {
 			p.checkNumStreams()
+			if (selfHasAddr && info.Address != "") &&
+				time.Since(p.LastUsed()) > idleTimeout {
+				slog.Infof("idle timeout expired: %s", info.PeerName)
+				_ = p.Close()
+			} else {
+				connectedCount++
+			}
 		} else if !selfHasAddr && info.Online && info.Address != "" {
 			slog.Infof("redial %q: %q", info.PeerName, info.Address)
 			go func(p *peer) {
@@ -307,17 +320,14 @@ func (s *Server) maintenance() {
 					slog.Errorf("redial %q: %v", info.PeerName, err)
 				}
 			}(p)
-		}
-		if (selfHasAddr && info.Address != "") &&
-			time.Since(p.LastUsed()) > idleTimeout {
-			slog.Infof("idle timeout expired: %s", info.PeerName)
-			_ = p.Close()
-		}
-		if time.Since(p.LastUpdate()) > peerInfoTimeout {
+		} else if time.Since(p.LastUpdate()) > peerInfoTimeout {
 			// slog.Infof("peer info timeout expired: %s", info.PeerName)
 			// s.deletePeer(info.PeerName)
 			// s.router.deletePeer(info.PeerName)
 		}
+	}
+	if !selfHasAddr && connectedCount < 1 {
+		s.BootstrapFromConfig()
 	}
 }
 
