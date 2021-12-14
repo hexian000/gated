@@ -87,11 +87,10 @@ func (c *Config) Load(cfg *config.Main) error {
 }
 
 func (c *Config) SetConnParams(conn net.Conn) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		_ = tcpConn.SetNoDelay(c.main.Transport.NoDelay)
-		_ = tcpConn.SetLinger(c.main.Transport.Linger)
+		cfg := c.Current()
+		_ = tcpConn.SetNoDelay(cfg.Transport.NoDelay)
+		_ = tcpConn.SetLinger(cfg.Transport.Linger)
 		_ = tcpConn.SetKeepAlive(false) // we have an encrypted one
 	}
 }
