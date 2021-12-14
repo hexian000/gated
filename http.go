@@ -155,18 +155,21 @@ func (h *apiHandler) ServeConnect(w http.ResponseWriter, req *http.Request) {
 	}
 	if proxyURL != nil {
 		slog.Debug("http connect: CONNECT ", req.Host)
-		conn := proxy.Client(dialed, req.Host)
-		err = conn.HandshakeContext(ctx)
+		dialed, err = proxy.Client(ctx, dialed, req.Host)
 		if err != nil {
 			slog.Warning("http connect:", err)
 			h.gatewayError(w, err)
 			return
 		}
 	}
-	w.WriteHeader(http.StatusOK)
 	accepted, err := proxy.Hijack(w)
 	if err != nil {
 		slog.Error("hijack:", err)
+		return
+	}
+	_, err = accepted.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+	if err != nil {
+		slog.Error("http connect:", err)
 		return
 	}
 	h.s.forwarder.Forward(accepted, dialed)

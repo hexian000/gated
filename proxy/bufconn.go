@@ -10,6 +10,8 @@ type BufConn struct {
 	io.Reader
 }
 
+var _ = net.Conn(&BufConn{})
+
 func (c *BufConn) Read(p []byte) (n int, err error) {
 	return c.Reader.Read(p)
 }

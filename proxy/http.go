@@ -7,107 +7,42 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 )
 
-type ClientConn struct {
-	BufConn
-
-	handshakeDone  bool
-	handshakeMutex sync.Mutex
-	host           string
-}
-
-func Client(conn net.Conn, host string) *ClientConn {
-	return &ClientConn{
-		BufConn: BufConn{
-			conn,
-			bufio.NewReader(conn),
-		},
-		host: host,
-	}
-}
-
-func (c *ClientConn) Read(p []byte) (n int, err error) {
-	if err := c.Handshake(); err != nil {
-		return 0, err
-	}
-	return c.Reader.Read(p)
-}
-
-func (c *ClientConn) Write(b []byte) (n int, err error) {
-	if err := c.Handshake(); err != nil {
-		return 0, err
-	}
-	return c.Conn.Write(b)
-}
-
-func (c *ClientConn) clientHandshake(ctx context.Context) error {
+func Client(ctx context.Context, conn net.Conn, host string) (*BufConn, error) {
 	if deadline, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(deadline)
+		_ = conn.SetDeadline(deadline)
 		defer func() {
-			_ = c.SetDeadline(time.Time{})
+			_ = conn.SetDeadline(time.Time{})
 		}()
 	}
 
+	rd := bufio.NewReader(conn)
 	req := &http.Request{
 		Method:     http.MethodConnect,
-		URL:        &url.URL{Host: c.host},
-		Host:       c.host,
+		URL:        &url.URL{Host: host},
+		Host:       host,
 		ProtoMajor: 1,
 		ProtoMinor: 1,
 		Header:     make(http.Header),
 	}
 	req.Header.Set("Proxy-Connection", "keep-alive")
-	if err := req.WriteProxy(c.Conn); err != nil {
-		return err
+	if err := req.WriteProxy(conn); err != nil {
+		return nil, err
 	}
-	resp, err := http.ReadResponse(c.BufConn.Reader.(*bufio.Reader), req)
+	resp, err := http.ReadResponse(rd, req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return errors.New(resp.Status)
-	}
-	c.handshakeDone = true
-	return nil
-}
-
-func (c *ClientConn) Handshake() error {
-	return c.HandshakeContext(context.Background())
-}
-
-func (c *ClientConn) HandshakeContext(ctx context.Context) (ret error) {
-	handshakeCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	if ctx.Done() != nil {
-		done := make(chan struct{})
-		interruptRes := make(chan error, 1)
-		defer func() {
-			close(done)
-			if ctxErr := <-interruptRes; ctxErr != nil {
-				ret = ctxErr
-			}
-		}()
-		go func() {
-			select {
-			case <-handshakeCtx.Done():
-				_ = c.Conn.Close()
-				interruptRes <- handshakeCtx.Err()
-			case <-done:
-				interruptRes <- nil
-			}
-		}()
+		return nil, errors.New(resp.Status)
 	}
 
-	c.handshakeMutex.Lock()
-	defer c.handshakeMutex.Unlock()
-	if c.handshakeDone {
-		return nil
-	}
-	return c.clientHandshake(handshakeCtx)
+	return &BufConn{
+		conn,
+		resp.Body,
+	}, nil
 }
 
 func Hijack(w http.ResponseWriter) (net.Conn, error) {
