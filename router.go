@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/hexian000/gated/slog"
 	"github.com/hexian000/gated/util"
@@ -18,12 +19,21 @@ type Router struct {
 	routes map[string]string // map[host]peer
 	hosts  map[string]string // map[host]addr
 
-	apiDomain    string
-	routeDomain  string
-	defaultProxy *url.URL
+	proxyMu sync.RWMutex
+	proxy   map[string]peerProxy
+
+	apiDomain   string
+	routeDomain string
+	defaultPeer string
 
 	dialer net.Dialer
 	server *Server
+}
+
+type peerProxy struct {
+	ready   bool
+	proxy   string
+	updated time.Time
 }
 
 type Resolver interface {
@@ -45,14 +55,13 @@ func NewRouter(domain string, defaultPeer string, server *Server, hosts map[stri
 		apiDomain:   server.cfg.GetFQDN(apiHost),
 		routeDomain: server.cfg.GetFQDN(routeHost),
 		server:      server,
+		proxy:       make(map[string]peerProxy),
+		defaultPeer: defaultPeer,
 	}
 	r.Transport = &http.Transport{
 		Proxy:             r.Proxy,
 		DialContext:       r.DialContext,
 		DisableKeepAlives: true,
-	}
-	if defaultPeer != "" {
-		r.defaultProxy = r.makeURL(defaultPeer)
 	}
 	return r
 }
@@ -100,25 +109,107 @@ func (r *Router) Routes() map[string]string {
 	return routes
 }
 
-func (r *Router) Resolve(host string) (*url.URL, error) {
+func (r *Router) resolve(host string) string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if _, ok := r.hosts[host]; ok {
 		// direct
-		slog.Debug("router resolve:", host, "goes direct")
+		return ""
+	}
+	peer, ok := r.routes[host]
+	if !ok {
+		// default
+		peer = r.defaultPeer
+	}
+	return peer
+}
+
+func (r *Router) Resolve(host string) (*url.URL, error) {
+	peer := r.resolve(host)
+	if peer == "" {
+		slog.Verbosef("router resolve: %q: goes direct", host)
 		return nil, nil
 	}
-	if peer, ok := r.routes[host]; ok {
-		// routed
-		slog.Debug("router resolve:", host, "via", peer)
-		return r.makeURL(peer), nil
+	if proxy := r.getProxy(peer, r.server.cfg.CacheTimeout()); proxy != "" {
+		slog.Debugf("router resolve: %q: %q via %q", host, peer, proxy)
+		return r.makeURL(proxy), nil
 	}
-	slog.Debugf("router resolve: %s goes default (%v)", host, r.defaultProxy)
-	return r.defaultProxy, nil
+	slog.Debugf("router resolve: %q: %s", host, peer)
+	return r.makeURL(peer), nil
 }
 
 func (r *Router) Proxy(req *http.Request) (*url.URL, error) {
 	return r.Resolve(req.URL.Hostname())
+}
+
+func (r *Router) getProxy(destination string, timeout time.Duration) string {
+	r.proxyMu.RLock()
+	defer r.proxyMu.RUnlock()
+	info, ok := r.proxy[destination]
+	if !ok || !info.ready {
+		return ""
+	}
+	if time.Since(info.updated) > timeout {
+		return ""
+	}
+	return info.proxy
+}
+
+func (r *Router) deleteProxy(destination string) {
+	r.proxyMu.Lock()
+	defer r.proxyMu.Unlock()
+	delete(r.proxy, destination)
+}
+
+func (r *Router) createProxy(destination string, timeout time.Duration) bool {
+	r.proxyMu.Lock()
+	defer r.proxyMu.Unlock()
+	info, ok := r.proxy[destination]
+	if ok && !info.ready {
+		return false
+	}
+	r.proxy[destination] = peerProxy{
+		ready:   false,
+		updated: time.Now(),
+	}
+	return true
+}
+
+func (r *Router) setProxy(destination, proxy string) {
+	r.proxyMu.Lock()
+	defer r.proxyMu.Unlock()
+	r.proxy[destination] = peerProxy{
+		ready:   true,
+		proxy:   proxy,
+		updated: time.Now(),
+	}
+}
+
+func (r *Router) updateProxyTo(destination string) {
+	if ok := r.createProxy(destination, r.server.cfg.CacheTimeout()); !ok {
+		return
+	}
+	proxy := destination
+	defer func() {
+		if proxy == destination {
+			r.deleteProxy(destination)
+			return
+		}
+		r.setProxy(destination, proxy)
+	}()
+	var err error
+	proxy, err = r.server.FindProxy(destination)
+	if err != nil {
+		slog.Error("find proxy:", err)
+	}
+}
+
+func (r *Router) dialProxyContext(ctx context.Context, peer string) (net.Conn, error) {
+	conn, err := r.server.DialPeerContext(ctx, peer)
+	if err != nil {
+		go r.updateProxyTo(peer)
+	}
+	return conn, err
 }
 
 func (r *Router) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -127,10 +218,10 @@ func (r *Router) DialContext(ctx context.Context, network, addr string) (net.Con
 		return nil, err
 	}
 	if peer, ok := util.StripDomain(host, r.routeDomain); ok {
-		return r.server.DialPeerContext(ctx, peer)
+		return r.dialProxyContext(ctx, peer)
 	}
 	if peer, ok := util.StripDomain(host, r.apiDomain); ok {
-		return r.server.DialPeerContext(ctx, peer)
+		return r.dialProxyContext(ctx, peer)
 	}
 	host = func(host string) string {
 		r.mu.RLock()

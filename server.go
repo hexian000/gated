@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"sort"
 	"sync"
 	"time"
 
@@ -35,16 +36,7 @@ type Server struct {
 	tlsListener  net.Listener
 	httpListener net.Listener
 
-	proxyMu    sync.Mutex
-	proxyCache map[string]peerProxy
-
 	shutdownCh chan struct{}
-}
-
-type peerProxy struct {
-	ready   bool
-	proxy   string
-	updated time.Time
 }
 
 func NewServer(cfg *Config) *Server {
@@ -54,7 +46,6 @@ func NewServer(cfg *Config) *Server {
 		peers:      make(map[string]*peer),
 		forwarder:  proxy.NewForwarder(),
 		canceller:  util.NewCanceller(),
-		proxyCache: make(map[string]peerProxy),
 		shutdownCh: make(chan struct{}),
 		httpServer: &http.Server{
 			ReadHeaderTimeout: timeout,
@@ -170,9 +161,16 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func (s *Server) findProxy(peer string) (*peer, error) {
+func (s *Server) FindProxy(peer string) (string, error) {
 	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 	defer s.canceller.Cancel(ctx)
+	type proxy struct {
+		name string
+		ttl  int
+		rtt  time.Duration
+	}
+	list := make([]proxy, 0)
+	start := time.Now()
 	for result := range s.Broadcast(ctx, "RPC.Ping", &proto.Ping{
 		Source:      s.LocalPeerName(),
 		Destination: peer,
@@ -182,85 +180,26 @@ func (s *Server) findProxy(peer string) (*peer, error) {
 			slog.Warning("ping:", result.err)
 			continue
 		}
-		return result.from, nil
+		list = append(list, proxy{
+			name: result.from.Name(),
+			ttl:  result.reply.(*proto.Ping).TTL,
+			rtt:  time.Since(start),
+		})
 	}
-	return nil, fmt.Errorf("ping: %s is unreachable", peer)
-}
-
-func (s *Server) getProxyCache(destination string) *peer {
-	s.proxyMu.Lock()
-	defer s.proxyMu.Unlock()
-	info, ok := s.proxyCache[destination]
-	if !ok || !info.ready {
-		return nil
+	if len(list) < 1 {
+		return "", fmt.Errorf("ping: %s is unreachable", peer)
+	} else if len(list) > 1 {
+		sort.SliceStable(list, func(i int, j int) bool {
+			if list[i].ttl == list[j].ttl {
+				return list[i].rtt < list[j].rtt
+			}
+			return list[i].ttl > list[j].ttl
+		})
 	}
-	if time.Since(info.updated) > s.cfg.CacheTimeout() {
-		go s.updateProxyTo(destination)
-		return nil
-	}
-	p := s.getPeer(info.proxy)
-	if p == nil {
-		delete(s.proxyCache, destination)
-		return nil
-	}
-	return p
-}
-
-func (s *Server) deleteProxyCache(destination string) {
-	s.proxyMu.Lock()
-	defer s.proxyMu.Unlock()
-	delete(s.proxyCache, destination)
-}
-
-func (s *Server) createProxyCache(destination string) bool {
-	s.proxyMu.Lock()
-	defer s.proxyMu.Unlock()
-	info, ok := s.proxyCache[destination]
-	if ok && !info.ready {
-		return false
-	}
-	s.proxyCache[destination] = peerProxy{ready: false}
-	return true
-}
-
-func (s *Server) setProxyCache(destination, proxy string) {
-	s.proxyMu.Lock()
-	defer s.proxyMu.Unlock()
-	s.proxyCache[destination] = peerProxy{
-		ready:   true,
-		proxy:   proxy,
-		updated: time.Now(),
-	}
-}
-
-func (s *Server) updateProxyTo(destination string) {
-	if ok := s.createProxyCache(destination); !ok {
-		return
-	}
-	var proxy *peer
-	defer func() {
-		if proxy == nil {
-			s.deleteProxyCache(destination)
-			return
-		}
-		s.setProxyCache(destination, proxy.Name())
-	}()
-	var err error
-	proxy, err = s.findProxy(destination)
-	if err != nil {
-		slog.Error("find proxy:", err)
-	}
+	return list[0].name, nil
 }
 
 func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, error) {
-	if proxy := s.getProxyCache(peer); proxy != nil {
-		slog.Debugf("dial peer %q via %q", proxy.Name())
-		conn, err := proxy.DialContext(ctx)
-		if err != nil {
-			s.deleteProxyCache(peer)
-		}
-		return conn, err
-	}
 	p := s.getPeer(peer)
 	if p == nil {
 		return nil, fmt.Errorf("unknown peer: %q", peer)
@@ -270,12 +209,7 @@ func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, er
 		return nil, fmt.Errorf("peer %q is unreachable", peer)
 	}
 	slog.Debugf("dial peer %q direct", peer)
-	conn, err := p.DialContext(ctx)
-	if err != nil {
-		slog.Errorf("dial peer %q direct failed: %v", peer, err)
-		go s.updateProxyTo(peer)
-	}
-	return conn, err
+	return p.DialContext(ctx)
 }
 
 func (s *Server) serve(tcpConn net.Conn) {
@@ -397,23 +331,28 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		w.WriteString(fmt.Sprintf(format, a...))
 	}
 	_, _ = w.WriteString("=== Peers ===\n")
+	cacheTimeout := s.cfg.CacheTimeout()
 	for name, p := range s.getPeers() {
 		info, connected := p.PeerInfo()
 		writef("\nPeer %q\n", name)
+		writef("    %-16s  %v\n", "Connected:", connected)
 		writef("    %-16s  %q\n", "Address:", info.Address)
 		writef("    %-16s  %v\n", "Online:", info.Online)
-		if proxy := s.getProxyCache(name); proxy != nil {
-			writef("    %-16s  %q\n", "Proxy:", proxy.Name())
-		} else {
-			writef("    %-16s  %s\n", "Proxy:", "(direct)")
+		proxy := s.router.getProxy(name, cacheTimeout)
+		if proxy == "" {
+			proxy = "(direct)"
 		}
+		writef("    %-16s  %q\n", "Proxy:", proxy)
 		writef("    %-16s: %s\n", "LastUpdated:", formatSince(now, p.LastUpdate()))
+		created := p.Created()
+		writef("    %-16s  %s (since %v)\n", "Created:", formatSince(now, created), created)
 		if connected {
-			created := p.Created()
-			writef("    %-16s  %s (since %v)\n", "Created:", formatSince(now, created), created)
+			if meter := p.meter; meter != nil {
+				read, written := meter.Count()
+				writef("    %-16s  %v / %v\n", "Bandwidth:", read, written)
+			}
+		} else {
 			writef("    %-16s  %s\n", "LastUsed:", formatSince(now, p.LastUsed()))
-			read, written := p.meter.Count()
-			writef("    %-16s  %v / %v\n", "Bandwidth:", read, written)
 		}
 	}
 	_, _ = w.WriteString("\n")
