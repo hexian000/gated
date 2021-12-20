@@ -99,6 +99,7 @@ func (s *Server) updatePeerInfo(info *proto.PeerInfo) bool {
 	slog.Debug("peer info add:", info)
 	p := newPeer(s)
 	p.info = *info
+	p.lastUpdate = time.Now()
 	s.addPeer(p)
 	return true
 }
