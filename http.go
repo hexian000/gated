@@ -55,7 +55,7 @@ func (h *apiHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	} else if ok {
 		p := h.s.getPeer(peer)
 		if p == nil {
-			http.Error(w, fmt.Sprintf("unknown peer: %s", peer), http.StatusNotFound)
+			webError(h.s, w, fmt.Sprintf("unknown peer: %q", peer), http.StatusNotFound)
 			return
 		}
 		slog.Verbose("routed api:", req.URL)
