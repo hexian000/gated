@@ -63,9 +63,6 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 	_, _ = w.WriteString(version.WebBanner(h.s.LocalPeerName()))
 
 	_, _ = w.WriteString("=== Peers ===\n\n")
-	writef := func(format string, a ...interface{}) {
-		w.WriteString(fmt.Sprintf(format, a...))
-	}
 	wg := sync.WaitGroup{}
 	ch := make(chan string, 10)
 	for _, p := range h.s.getPeers() {
@@ -74,6 +71,9 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 			defer wg.Done()
 			info, connected := p.PeerInfo()
 			w := &bytes.Buffer{}
+			writef := func(format string, a ...interface{}) {
+				w.WriteString(fmt.Sprintf(format, a...))
+			}
 			writef("%q: address=%q, connected=%v, last used=%v\n", info.PeerName, info.Address, connected, formatSince(start, p.LastUsed()))
 			ctx := h.s.canceller.WithTimeout(h.s.cfg.Timeout())
 			defer h.s.canceller.Cancel(ctx)
@@ -105,7 +105,7 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 
 	_, _ = w.WriteString("=== Routes ===\n\n")
 	for host, peer := range h.s.router.Routes() {
-		writef("%q at %q\n", host, peer)
+		w.WriteString(fmt.Sprintf("%q at %q\n", host, peer))
 	}
 	_, _ = w.WriteString("\n")
 
