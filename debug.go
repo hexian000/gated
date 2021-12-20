@@ -63,7 +63,7 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 	_, _ = w.WriteString(version.WebBanner(h.s.LocalPeerName()))
 
 	_, _ = w.WriteString("=== Peers ===\n\n")
-	printf := func(format string, a ...interface{}) {
+	writef := func(format string, a ...interface{}) {
 		w.WriteString(fmt.Sprintf(format, a))
 	}
 	wg := sync.WaitGroup{}
@@ -74,7 +74,7 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 			defer wg.Done()
 			info, connected := p.PeerInfo()
 			w := &bytes.Buffer{}
-			printf("%q: address=%q, connected=%v, last used=%v\n", info.PeerName, info.Address, connected, formatSince(start, p.LastUsed()))
+			writef("%q: address=%q, connected=%v, last used=%v\n", info.PeerName, info.Address, connected, formatSince(start, p.LastUsed()))
 			ctx := h.s.canceller.WithTimeout(h.s.cfg.Timeout())
 			defer h.s.canceller.Cancel(ctx)
 			start := time.Now()
@@ -85,11 +85,11 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 			}, reflect.TypeOf(proto.Ping{})) {
 				from := result.from.info.PeerName
 				if result.err != nil {
-					printf("    %v: error from %q: %s\n", time.Since(start), from, result.err.Error())
+					writef("    %v: error from %q: %s\n", time.Since(start), from, result.err.Error())
 					continue
 				}
 				reply := result.reply.(*proto.Ping)
-				printf("    %v: reply from %q, TTL=%d\n", time.Since(start), from, reply.TTL)
+				writef("    %v: reply from %q, TTL=%d\n", time.Since(start), from, reply.TTL)
 			}
 			ch <- w.String()
 		}(p)
@@ -105,7 +105,7 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 
 	_, _ = w.WriteString("=== Routes ===\n\n")
 	for host, peer := range h.s.router.Routes() {
-		printf("%q at %q\n", host, peer)
+		writef("%q at %q\n", host, peer)
 	}
 	_, _ = w.WriteString("\n")
 

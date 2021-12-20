@@ -393,27 +393,27 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 	(&metric.Runtime{}).CollectMetrics(w)
 	_, _ = w.WriteString("\n")
 
-	printf := func(format string, a ...interface{}) {
+	writef := func(format string, a ...interface{}) {
 		w.WriteString(fmt.Sprintf(format, a))
 	}
 	_, _ = w.WriteString("=== Peers ===\n")
 	for name, p := range s.getPeers() {
 		info, connected := p.PeerInfo()
-		printf("\nPeer %q\n", name)
-		printf("%-20s: %q\n", "Address", info.Address)
-		printf("%-20s: %v\n", "Online", info.Online)
+		writef("\nPeer %q\n", name)
+		writef("%20s: %q\n", "Address", info.Address)
+		writef("%20s: %v\n", "Online", info.Online)
 		if proxy := s.getProxyCache(name); proxy != nil {
-			printf("%-20s: %q\n", "Proxy", proxy.Name())
+			writef("%20s: %q\n", "Proxy", proxy.Name())
 		} else {
-			printf("%-20s: %s\n", "Proxy", "(direct)")
+			writef("%20s: %s\n", "Proxy", "(direct)")
 		}
-		printf("%-20s: %s\n", "LastUpdated", formatSince(now, p.LastUpdate()))
+		writef("%20s: %s\n", "LastUpdated", formatSince(now, p.LastUpdate()))
 		if connected {
 			created := p.Created()
-			printf("%-20s: %s (since %v)\n", "Created", formatSince(now, created), created)
-			printf("%-20s: %s\n", "LastUsed", formatSince(now, p.LastUsed()))
+			writef("%20s: %s (since %v)\n", "Created", formatSince(now, created), created)
+			writef("%20s: %s\n", "LastUsed", formatSince(now, p.LastUsed()))
 			read, written := p.meter.Count()
-			printf("%-20s: %v / %v\n", "Bandwidth", read, written)
+			writef("%20s: %v / %v\n", "Bandwidth", read, written)
 		}
 	}
 	_, _ = w.WriteString("\n")
