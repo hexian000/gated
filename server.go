@@ -353,7 +353,7 @@ func (s *Server) maintenance() {
 			p.SetOnline(false)
 		}
 	}
-	if !selfHasAddr && connectedCount < 1 {
+	if connectedCount < 1 {
 		s.BootstrapFromConfig()
 	}
 }
