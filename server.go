@@ -374,8 +374,8 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 	for name, p := range s.getPeers() {
 		info, connected := p.PeerInfo()
 		w.WriteString(fmt.Sprintf("\nPeer %q\n", name))
-		w.WriteString(fmt.Sprintf("    Address:  %q\n", info.Address))
-		w.WriteString(fmt.Sprintf("    Online:  %v\n", info.Online))
+		w.WriteString(fmt.Sprintf("    Address:     %q\n", info.Address))
+		w.WriteString(fmt.Sprintf("    Online:      %v\n", info.Online))
 		lastUpdatedStr := "never"
 		if t := p.LastUpdate(); t != (time.Time{}) {
 			lastUpdatedStr = now.Sub(t).String()
