@@ -224,6 +224,7 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 	}
 	slog.Verbosef("bootstrap %v: reply: %v", connId, cluster)
 	info = cluster.Self
+	p.server.router.deleteProxy(info.PeerName)
 	go p.serveAPI(muxConn)
 	func() {
 		p.mu.Lock()

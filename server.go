@@ -177,7 +177,6 @@ func (s *Server) FindProxy(peer string) (string, error) {
 		TTL:         2,
 	}, reflect.TypeOf(proto.Ping{})) {
 		if result.err != nil {
-			slog.Warning("ping:", result.err)
 			continue
 		}
 		list = append(list, proxy{
@@ -187,7 +186,7 @@ func (s *Server) FindProxy(peer string) (string, error) {
 		})
 	}
 	if len(list) < 1 {
-		return "", fmt.Errorf("ping: %s is unreachable", peer)
+		return "", fmt.Errorf("find proxy: %s is unreachable", peer)
 	} else if len(list) > 1 {
 		sort.SliceStable(list, func(i int, j int) bool {
 			if list[i].ttl == list[j].ttl {
