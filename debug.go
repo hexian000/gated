@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"math"
 	"net/http"
 	"reflect"
 	"sync"
@@ -17,7 +18,22 @@ func formatSince(now, last time.Time) string {
 	if last == (time.Time{}) {
 		return "(never)"
 	}
-	return now.Sub(last).String()
+	return fmt.Sprintf("%s (since %v)", now.Sub(last), last)
+}
+
+func formatIEC(bytes uint64) string {
+	units := [...]string{"KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"}
+	n := -1
+	if bytes > 0 {
+		n = int(math.Floor((math.Floor(math.Log2(float64(bytes)))-3.0)/10.0)) - 1
+	}
+	if n < 0 {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	if n >= len(units) {
+		n = len(units) - 1
+	}
+	return fmt.Sprintf("%.01f %s", float64(bytes)/float64(uint64(2)<<((n+1)*10)), units[n])
 }
 
 type statusHandler struct {
@@ -72,9 +88,9 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 			info, connected := p.PeerInfo()
 			w := &bytes.Buffer{}
 			writef := func(format string, a ...interface{}) {
-				w.WriteString(fmt.Sprintf(format, a...))
+				_, _ = w.WriteString(fmt.Sprintf(format, a...))
 			}
-			writef("%q: address=%q, connected=%v, last used=%v\n", info.PeerName, info.Address, connected, formatSince(start, p.LastUsed()))
+			writef("%q: Address=%q, Connected=%v, LastConnected=%v\n", info.PeerName, info.Address, connected, formatSince(start, p.LastUsed()))
 			ctx := h.s.canceller.WithTimeout(h.s.cfg.Timeout())
 			defer h.s.canceller.Cancel(ctx)
 			start := time.Now()
@@ -91,6 +107,7 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 				reply := result.reply.(*proto.Ping)
 				writef("    %v: reply from %q, TTL=%d\n", time.Since(start), from, reply.TTL)
 			}
+			_, _ = w.WriteString("\n")
 			ch <- w.String()
 		}(p)
 	}

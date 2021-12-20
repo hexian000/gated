@@ -335,23 +335,22 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		info, connected := p.PeerInfo()
 		writef("\nPeer %q\n", name)
 		writef("    %-16s  %q\n", "Address:", info.Address)
-		writef("    %-16s  %v\n", "Connected:", connected)
+		if connected {
+			writef("    %-16s  %v\n", "Connected:", connected)
+		} else {
+			writef("    %-16s  %s\n", "LastConnected:", formatSince(now, p.LastUsed()))
+		}
 		writef("    %-16s  %v\n", "Online:", info.Online)
 		if proxy := s.router.getProxy(name, cacheTimeout); proxy == "" {
 			writef("    %-16s  %s\n", "Proxy:", "(direct)")
 		} else {
 			writef("    %-16s  %q\n", "Proxy:", proxy)
 		}
+		writef("    %-16s  %s\n", "Created:", formatSince(now, p.Created()))
 		writef("    %-16s  %s\n", "LastUpdated:", formatSince(now, p.LastUpdate()))
-		created := p.Created()
-		writef("    %-16s  %s (since %v)\n", "Created:", formatSince(now, created), created)
-		if connected {
-			if meter := p.meter; meter != nil {
-				read, written := meter.Count()
-				writef("    %-16s  %v / %v\n", "Bandwidth:", read, written)
-			}
-		} else {
-			writef("    %-16s  %s\n", "LastUsed:", formatSince(now, p.LastUsed()))
+		if meter := p.meter; meter != nil {
+			read, written := meter.Count()
+			writef("    %-16s  %v / %v\n", "Bandwidth:", formatIEC(read), formatIEC(written))
 		}
 	}
 	_, _ = w.WriteString("\n")
