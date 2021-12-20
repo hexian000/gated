@@ -338,12 +338,12 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		writef("    %-16s  %v\n", "Connected:", connected)
 		writef("    %-16s  %q\n", "Address:", info.Address)
 		writef("    %-16s  %v\n", "Online:", info.Online)
-		proxy := s.router.getProxy(name, cacheTimeout)
-		if proxy == "" {
-			proxy = "(direct)"
+		if proxy := s.router.getProxy(name, cacheTimeout); proxy == "" {
+			writef("    %-16s  %s\n", "Proxy:", "(direct)")
+		} else {
+			writef("    %-16s  %q\n", "Proxy:", proxy)
 		}
-		writef("    %-16s  %q\n", "Proxy:", proxy)
-		writef("    %-16s: %s\n", "LastUpdated:", formatSince(now, p.LastUpdate()))
+		writef("    %-16s  %s\n", "LastUpdated:", formatSince(now, p.LastUpdate()))
 		created := p.Created()
 		writef("    %-16s  %s (since %v)\n", "Created:", formatSince(now, created), created)
 		if connected {
