@@ -393,27 +393,27 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 	(&metric.Runtime{}).CollectMetrics(w)
 	_, _ = w.WriteString("\n")
 
+	printf := func(format string, a ...interface{}) {
+		w.WriteString(fmt.Sprintf(format, a))
+	}
 	_, _ = w.WriteString("=== Peers ===\n")
 	for name, p := range s.getPeers() {
 		info, connected := p.PeerInfo()
-		w.WriteString(fmt.Sprintf("\nPeer %q\n", name))
-		w.WriteString(fmt.Sprintf("    Address:     %q\n", info.Address))
-		w.WriteString(fmt.Sprintf("    Online:      %v\n", info.Online))
-		lastUpdatedStr := "never"
-		if t := p.LastUpdate(); t != (time.Time{}) {
-			lastUpdatedStr = now.Sub(t).String()
+		printf("\nPeer %q\n", name)
+		printf("%-20s: %q\n", "Address", info.Address)
+		printf("%-20s: %v\n", "Online", info.Online)
+		if proxy := s.getProxyCache(name); proxy != nil {
+			printf("%-20s: %q\n", "Proxy", proxy.Name())
+		} else {
+			printf("%-20s: %s\n", "Proxy", "(direct)")
 		}
-		w.WriteString(fmt.Sprintf("    LastUpdated: %s\n", lastUpdatedStr))
+		printf("%-20s: %s\n", "LastUpdated", formatSince(now, p.LastUpdate()))
 		if connected {
 			created := p.Created()
-			w.WriteString(fmt.Sprintf("    Connected:   %v (since %v)\n", now.Sub(created).String(), created))
-			lastUsedStr := "never"
-			if t := p.LastUsed(); t != (time.Time{}) {
-				lastUsedStr = now.Sub(t).String()
-			}
-			w.WriteString(fmt.Sprintf("    LastUsed:    %s\n", lastUsedStr))
+			printf("%-20s: %s (since %v)\n", "Created", formatSince(now, created), created)
+			printf("%-20s: %s\n", "LastUsed", formatSince(now, p.LastUsed()))
 			read, written := p.meter.Count()
-			w.WriteString(fmt.Sprintf("    Bandwidth:   %v / %v\n", read, written))
+			printf("%-20s: %v / %v\n", "Bandwidth", read, written)
 		}
 	}
 	_, _ = w.WriteString("\n")

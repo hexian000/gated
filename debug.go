@@ -13,6 +13,13 @@ import (
 	"github.com/hexian000/gated/version"
 )
 
+func formatSince(now, last time.Time) string {
+	if last == (time.Time{}) {
+		return "(never)"
+	}
+	return now.Sub(last).String()
+}
+
 type statusHandler struct {
 	s *Server
 }
@@ -56,6 +63,9 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 	_, _ = w.WriteString(version.WebBanner(h.s.LocalPeerName()))
 
 	_, _ = w.WriteString("=== Peers ===\n\n")
+	printf := func(format string, a ...interface{}) {
+		w.WriteString(fmt.Sprintf(format, a))
+	}
 	wg := sync.WaitGroup{}
 	ch := make(chan string, 10)
 	for _, p := range h.s.getPeers() {
@@ -64,7 +74,7 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 			defer wg.Done()
 			info, connected := p.PeerInfo()
 			w := &bytes.Buffer{}
-			w.WriteString(fmt.Sprintf("%q: %q, %v, %v\n", info.PeerName, info.Address, connected, time.Since(p.LastUsed())))
+			printf("%q: address=%q, connected=%v, last used=%v\n", info.PeerName, info.Address, connected, formatSince(start, p.LastUsed()))
 			ctx := h.s.canceller.WithTimeout(h.s.cfg.Timeout())
 			defer h.s.canceller.Cancel(ctx)
 			start := time.Now()
@@ -75,11 +85,11 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 			}, reflect.TypeOf(proto.Ping{})) {
 				from := result.from.info.PeerName
 				if result.err != nil {
-					w.WriteString(fmt.Sprintf("    %v: error from %s: %s\n", time.Since(start), from, result.err.Error()))
+					printf("    %v: error from %q: %s\n", time.Since(start), from, result.err.Error())
 					continue
 				}
 				reply := result.reply.(*proto.Ping)
-				w.WriteString(fmt.Sprintf("    %v: reply from %s, TTL=%d\n", time.Since(start), from, reply.TTL))
+				printf("    %v: reply from %q, TTL=%d\n", time.Since(start), from, reply.TTL)
 			}
 			ch <- w.String()
 		}(p)
@@ -95,7 +105,7 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 
 	_, _ = w.WriteString("=== Routes ===\n\n")
 	for host, peer := range h.s.router.Routes() {
-		w.WriteString(fmt.Sprintf("%q via %s\n", host, peer))
+		printf("%q at %q\n", host, peer)
 	}
 	_, _ = w.WriteString("\n")
 
