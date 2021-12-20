@@ -400,20 +400,20 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 	for name, p := range s.getPeers() {
 		info, connected := p.PeerInfo()
 		writef("\nPeer %q\n", name)
-		writef("    %-16s: %q\n", "Address", info.Address)
-		writef("    %-16s: %v\n", "Online", info.Online)
+		writef("    %-16s  %q\n", "Address:", info.Address)
+		writef("    %-16s  %v\n", "Online:", info.Online)
 		if proxy := s.getProxyCache(name); proxy != nil {
-			writef("    %-16s: %q\n", "Proxy", proxy.Name())
+			writef("    %-16s  %q\n", "Proxy:", proxy.Name())
 		} else {
-			writef("    %-16s: %s\n", "Proxy", "(direct)")
+			writef("    %-16s  %s\n", "Proxy:", "(direct)")
 		}
-		writef("    %-16s: %s\n", "LastUpdated", formatSince(now, p.LastUpdate()))
+		writef("    %-16s: %s\n", "LastUpdated:", formatSince(now, p.LastUpdate()))
 		if connected {
 			created := p.Created()
-			writef("    %-16s: %s (since %v)\n", "Created", formatSince(now, created), created)
-			writef("    %-16s: %s\n", "LastUsed", formatSince(now, p.LastUsed()))
+			writef("    %-16s  %s (since %v)\n", "Created:", formatSince(now, created), created)
+			writef("    %-16s  %s\n", "LastUsed:", formatSince(now, p.LastUsed()))
 			read, written := p.meter.Count()
-			writef("    %-16s: %v / %v\n", "Bandwidth", read, written)
+			writef("    %-16s  %v / %v\n", "Bandwidth:", read, written)
 		}
 	}
 	_, _ = w.WriteString("\n")
