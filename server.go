@@ -42,8 +42,9 @@ type Server struct {
 }
 
 type peerProxy struct {
-	proxy string
-	saved time.Time
+	ready   bool
+	proxy   string
+	updated time.Time
 }
 
 func NewServer(cfg *Config) *Server {
@@ -190,11 +191,11 @@ func (s *Server) getProxyCache(destination string) *peer {
 	s.proxyMu.Lock()
 	defer s.proxyMu.Unlock()
 	info, ok := s.proxyCache[destination]
-	if !ok {
+	if !ok || !info.ready {
 		return nil
 	}
-	if time.Since(info.saved) > s.cfg.CacheTimeout() {
-		delete(s.proxyCache, destination)
+	if time.Since(info.updated) > s.cfg.CacheTimeout() {
+		go s.updateProxyTo(destination)
 		return nil
 	}
 	p := s.getPeer(info.proxy)
@@ -211,17 +212,49 @@ func (s *Server) deleteProxyCache(destination string) {
 	delete(s.proxyCache, destination)
 }
 
-func (s *Server) saveProxyCache(destination, proxy string) {
+func (s *Server) createProxyCache(destination string) bool {
+	s.proxyMu.Lock()
+	defer s.proxyMu.Unlock()
+	info, ok := s.proxyCache[destination]
+	if ok && !info.ready {
+		return false
+	}
+	s.proxyCache[destination] = peerProxy{ready: false}
+	return true
+}
+
+func (s *Server) setProxyCache(destination, proxy string) {
 	s.proxyMu.Lock()
 	defer s.proxyMu.Unlock()
 	s.proxyCache[destination] = peerProxy{
-		proxy: proxy,
-		saved: time.Now(),
+		ready:   true,
+		proxy:   proxy,
+		updated: time.Now(),
+	}
+}
+
+func (s *Server) updateProxyTo(destination string) {
+	if ok := s.createProxyCache(destination); !ok {
+		return
+	}
+	var proxy *peer
+	defer func() {
+		if proxy == nil {
+			s.deleteProxyCache(destination)
+			return
+		}
+		s.setProxyCache(destination, proxy.Name())
+	}()
+	var err error
+	proxy, err = s.findProxy(destination)
+	if err != nil {
+		slog.Error("find proxy:", err)
 	}
 }
 
 func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, error) {
 	if proxy := s.getProxyCache(peer); proxy != nil {
+		slog.Debugf("dial peer %q via %q", proxy.Name())
 		conn, err := proxy.DialContext(ctx)
 		if err != nil {
 			s.deleteProxyCache(peer)
@@ -232,26 +265,16 @@ func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, er
 	if p == nil {
 		return nil, fmt.Errorf("unknown peer: %q", peer)
 	}
-	if info, connected := p.PeerInfo(); !connected && info.Address != "" {
-		// prefer direct
-		conn, err := p.DialContext(ctx)
-		if err != nil {
-			slog.Errorf("dial peer %q direct failed: %v", peer, err)
-		} else {
-			slog.Debugf("dial peer %q direct", peer, err)
-		}
-		return conn, err
+	info, connected := p.PeerInfo()
+	if !connected && info.Address == "" {
+		return nil, fmt.Errorf("peer %q is unreachable", peer)
 	}
-	proxy, err := s.findProxy(peer)
+	slog.Debugf("dial peer %q direct", peer)
+	conn, err := p.DialContext(ctx)
 	if err != nil {
-		slog.Debug("find proxy:", err)
-		return nil, err
+		slog.Errorf("dial peer %q direct failed: %v", peer, err)
+		go s.updateProxyTo(peer)
 	}
-	conn, err := proxy.DialContext(ctx)
-	if err == nil {
-		s.saveProxyCache(peer, proxy.info.PeerName)
-	}
-	slog.Debugf("dial peer %s via %s", peer, proxy)
 	return conn, err
 }
 

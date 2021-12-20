@@ -44,6 +44,12 @@ func newPeer(s *Server) *peer {
 	}
 }
 
+func (p *peer) Name() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.info.PeerName
+}
+
 func (p *peer) PeerInfo() (info proto.PeerInfo, connected bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
