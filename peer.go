@@ -171,10 +171,10 @@ func (p *peer) serveAPI(mux *yamux.Session) {
 func (p *peer) Bootstrap(ctx context.Context) error {
 	info, connected := p.PeerInfo()
 	if info.Address == "" {
-		return fmt.Errorf("peer %s has no address", info.PeerName)
+		return fmt.Errorf("peer %q has no address", info.PeerName)
 	}
 	if !info.Online {
-		return fmt.Errorf("peer %s is offline", info.PeerName)
+		return fmt.Errorf("peer %q is offline", info.PeerName)
 	}
 	p.bootstrapCh <- struct{}{}
 	defer func() {

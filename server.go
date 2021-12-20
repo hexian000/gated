@@ -334,7 +334,7 @@ func (s *Server) maintenance() {
 			p.checkNumStreams()
 			if (selfHasAddr && info.Address != "") &&
 				time.Since(p.LastUsed()) > idleTimeout {
-				slog.Infof("idle timeout expired: %s", info.PeerName)
+				slog.Infof("idle timeout expired: %q", info.PeerName)
 				_ = p.Close()
 			} else {
 				connectedCount++
@@ -349,7 +349,7 @@ func (s *Server) maintenance() {
 				}
 			}(p)
 		} else if time.Since(p.LastUpdate()) > peerInfoTimeout {
-			slog.Infof("peer info timeout expired: %s", info.PeerName)
+			slog.Infof("peer info timeout expired: %q", info.PeerName)
 			p.SetOnline(false)
 		}
 	}

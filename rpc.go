@@ -80,7 +80,7 @@ func (s *Server) RandomCall(ctx context.Context, method string, args interface{}
 	if p == nil {
 		return errors.New("no connected peer")
 	}
-	slog.Debugf("ramdom calling %s", p.info.PeerName)
+	slog.Debugf("ramdom calling %q", p.info.PeerName)
 	return p.Call(ctx, method, args, reply)
 }
 
