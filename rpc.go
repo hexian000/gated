@@ -67,7 +67,8 @@ func (s *Server) RandomCall(ctx context.Context, method string, args interface{}
 	p := func() *peer {
 		set := make([]*peer, 0)
 		for _, p := range s.getPeers() {
-			if p.hasAddress() || p.isConnected() {
+			info, connected := p.PeerInfo()
+			if info.Address != "" || connected {
 				set = append(set, p)
 			}
 		}
@@ -93,6 +94,10 @@ func (s *Server) Broadcast(ctx context.Context, method string, args interface{},
 	wg := sync.WaitGroup{}
 	ch := make(chan rpcResult, 10)
 	for name, p := range s.getPeers() {
+		if info, connected := p.PeerInfo(); !info.Online ||
+			(!connected && info.Address == "") {
+			continue
+		}
 		wg.Add(1)
 		go func(name string, p *peer) {
 			defer wg.Done()

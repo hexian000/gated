@@ -54,14 +54,14 @@ func (s *Server) addPeer(peer *peer) {
 	s.router.update(peer.info.Hosts, name)
 }
 
-func (s *Server) deletePeer(name string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if p, ok := s.peers[name]; ok {
-		_ = p.Close()
-		delete(s.peers, name)
-	}
-}
+// func (s *Server) deletePeer(name string) {
+// 	s.mu.Lock()
+// 	defer s.mu.Unlock()
+// 	if p, ok := s.peers[name]; ok {
+// 		_ = p.Close()
+// 		delete(s.peers, name)
+// 	}
+// }
 
 func (s *Server) getPeers() map[string]*peer {
 	s.mu.RLock()

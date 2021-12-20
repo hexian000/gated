@@ -44,22 +44,16 @@ func newPeer(s *Server) *peer {
 	}
 }
 
-func (p *peer) hasAddress() bool {
+func (p *peer) PeerInfo() (info proto.PeerInfo, connected bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return p.info.Address != ""
+	return p.info, p.mux != nil && !p.mux.IsClosed()
 }
 
-func (p *peer) isConnected() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.mux != nil && !p.mux.IsClosed()
-}
-
-func (p *peer) PeerInfo() proto.PeerInfo {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.info
+func (p *peer) SetOnline(online bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.info.Online = online
 }
 
 func (p *peer) checkNumStreams() {
@@ -168,22 +162,19 @@ func (p *peer) serveAPI(mux *yamux.Session) {
 	_ = server.Serve(mux)
 }
 
-func (p *peer) isDirectReachable() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.info.Online && (p.info.Address != "" || (p.mux != nil && !p.mux.IsClosed()))
-}
-
 func (p *peer) Bootstrap(ctx context.Context) error {
-	info := p.PeerInfo()
-	if !p.isDirectReachable() {
-		return fmt.Errorf("peer %s is unreachable", info.PeerName)
+	info, connected := p.PeerInfo()
+	if info.Address == "" {
+		return fmt.Errorf("peer %s has no address", info.PeerName)
+	}
+	if !info.Online {
+		return fmt.Errorf("peer %s is offline", info.PeerName)
 	}
 	p.bootstrapCh <- struct{}{}
 	defer func() {
 		<-p.bootstrapCh
 	}()
-	if p.isConnected() {
+	if connected {
 		return nil
 	}
 

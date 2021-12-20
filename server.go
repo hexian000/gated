@@ -229,13 +229,18 @@ func (s *Server) DialPeerContext(ctx context.Context, peer string) (net.Conn, er
 		return conn, err
 	}
 	p := s.getPeer(peer)
-	if p != nil && p.hasAddress() {
+	if p == nil {
+		return nil, fmt.Errorf("unknown peer: %q", peer)
+	}
+	if info, connected := p.PeerInfo(); !connected && info.Address != "" {
 		// prefer direct
 		conn, err := p.DialContext(ctx)
-		if err == nil {
-			return conn, nil
+		if err != nil {
+			slog.Errorf("dial peer %q direct failed: %v", peer, err)
+		} else {
+			slog.Debugf("dial peer %q direct", peer, err)
 		}
-		slog.Debugf("dial peer %s direct: %v", peer, err)
+		return conn, err
 	}
 	proxy, err := s.findProxy(peer)
 	if err != nil {
@@ -301,8 +306,8 @@ func (s *Server) maintenance() {
 	idleTimeout := time.Duration(cfg.Transport.IdleTimeout) * time.Second
 	connectedCount := 0
 	for _, p := range s.getPeers() {
-		info := p.PeerInfo()
-		if p.isConnected() {
+		info, connected := p.PeerInfo()
+		if connected {
 			p.checkNumStreams()
 			if (selfHasAddr && info.Address != "") &&
 				time.Since(p.LastUsed()) > idleTimeout {
@@ -321,9 +326,8 @@ func (s *Server) maintenance() {
 				}
 			}(p)
 		} else if time.Since(p.LastUpdate()) > peerInfoTimeout {
-			// slog.Infof("peer info timeout expired: %s", info.PeerName)
-			// s.deletePeer(info.PeerName)
-			// s.router.deletePeer(info.PeerName)
+			slog.Infof("peer info timeout expired: %s", info.PeerName)
+			p.SetOnline(false)
 		}
 	}
 	if !selfHasAddr && connectedCount < 1 {
@@ -368,14 +372,16 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 
 	_, _ = w.WriteString("=== Peers ===\n\n")
 	for name, p := range s.getPeers() {
-		w.WriteString(fmt.Sprintf("%s:\n", name))
-		w.WriteString(fmt.Sprintf("    HasAddress:  %v\n", p.hasAddress()))
+		info, connected := p.PeerInfo()
+		w.WriteString(fmt.Sprintf("Peer %q\n", name))
+		w.WriteString(fmt.Sprintf("    Address:  %q\n", info.Address))
+		w.WriteString(fmt.Sprintf("    Online:  %v\n", info.Online))
 		lastUpdatedStr := "never"
 		if t := p.LastUpdate(); t != (time.Time{}) {
 			lastUpdatedStr = now.Sub(t).String()
 		}
 		w.WriteString(fmt.Sprintf("    LastUpdated: %s\n", lastUpdatedStr))
-		if p.isConnected() {
+		if connected {
 			created := p.Created()
 			w.WriteString(fmt.Sprintf("    Connected:   %v (since %v)\n", now.Sub(created).String(), created))
 			lastUsedStr := "never"
