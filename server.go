@@ -394,7 +394,7 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 	_, _ = w.WriteString("\n")
 
 	writef := func(format string, a ...interface{}) {
-		w.WriteString(fmt.Sprintf(format, a))
+		w.WriteString(fmt.Sprintf(format, a...))
 	}
 	_, _ = w.WriteString("=== Peers ===\n")
 	for name, p := range s.getPeers() {

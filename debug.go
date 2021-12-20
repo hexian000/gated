@@ -64,7 +64,7 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 
 	_, _ = w.WriteString("=== Peers ===\n\n")
 	writef := func(format string, a ...interface{}) {
-		w.WriteString(fmt.Sprintf(format, a))
+		w.WriteString(fmt.Sprintf(format, a...))
 	}
 	wg := sync.WaitGroup{}
 	ch := make(chan string, 10)
