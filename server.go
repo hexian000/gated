@@ -335,8 +335,8 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 	for name, p := range s.getPeers() {
 		info, connected := p.PeerInfo()
 		writef("\nPeer %q\n", name)
-		writef("    %-16s  %v\n", "Connected:", connected)
 		writef("    %-16s  %q\n", "Address:", info.Address)
+		writef("    %-16s  %v\n", "Connected:", connected)
 		writef("    %-16s  %v\n", "Online:", info.Online)
 		if proxy := s.router.getProxy(name, cacheTimeout); proxy == "" {
 			writef("    %-16s  %s\n", "Proxy:", "(direct)")
