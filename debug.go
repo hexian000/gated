@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"math"
+	"math/bits"
 	"net/http"
 	"reflect"
 	"sync"
@@ -21,19 +21,30 @@ func formatSince(now, last time.Time) string {
 	return fmt.Sprintf("%s (since %v)", now.Sub(last), last)
 }
 
+func Int64Log2(x uint64) int {
+	return (8 << 3) - 1 - bits.LeadingZeros64(x)
+}
+
 func formatIEC(bytes uint64) string {
-	units := [...]string{"KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"}
+	units := [...]string{"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"}
 	n := -1
 	if bytes > 0 {
-		n = int(math.Floor((math.Floor(math.Log2(float64(bytes)))-3.0)/10.0)) - 1
+		n = (Int64Log2(bytes) - 3) / 10
 	}
-	if n < 0 {
+	if n <= 0 {
 		return fmt.Sprintf("%d B", bytes)
 	}
 	if n >= len(units) {
 		n = len(units) - 1
 	}
-	return fmt.Sprintf("%.01f %s", float64(bytes)/float64(uint64(2)<<((n+1)*10)), units[n])
+	v := float64(bytes) / float64(uint64(1)<<(n*10))
+	if v < 10 {
+		return fmt.Sprintf("%.02f %s", v, units[n])
+	}
+	if v < 100 {
+		return fmt.Sprintf("%.01f %s", v, units[n])
+	}
+	return fmt.Sprintf("%.0f %s", v, units[n])
 }
 
 type statusHandler struct {
