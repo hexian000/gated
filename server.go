@@ -161,7 +161,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func (s *Server) FindProxy(peer string) (string, error) {
+func (s *Server) FindProxy(peer, except string) (string, error) {
 	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 	defer s.canceller.Cancel(ctx)
 	type proxy struct {
@@ -171,7 +171,7 @@ func (s *Server) FindProxy(peer string) (string, error) {
 	}
 	list := make([]proxy, 0)
 	start := time.Now()
-	for result := range s.Broadcast(ctx, "RPC.Ping", peer, &proto.Ping{
+	for result := range s.Broadcast(ctx, "RPC.Ping", except, &proto.Ping{
 		Source:      s.LocalPeerName(),
 		Destination: peer,
 		TTL:         2,

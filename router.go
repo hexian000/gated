@@ -150,7 +150,8 @@ func (r *Router) getProxy(destination string, timeout time.Duration) string {
 		return ""
 	}
 	if time.Since(info.updated) > timeout {
-		return ""
+		go r.updateProxy(destination, true)
+		return info.proxy
 	}
 	return info.proxy
 }
@@ -185,7 +186,7 @@ func (r *Router) setProxy(destination, proxy string) {
 	}
 }
 
-func (r *Router) updateProxyTo(destination string) {
+func (r *Router) updateProxy(destination string, allowDirect bool) {
 	if ok := r.createProxy(destination, r.server.cfg.CacheTimeout()); !ok {
 		return
 	}
@@ -197,8 +198,12 @@ func (r *Router) updateProxyTo(destination string) {
 		}
 		r.setProxy(destination, proxy)
 	}()
+	except := destination
+	if allowDirect {
+		except = ""
+	}
 	var err error
-	proxy, err = r.server.FindProxy(destination)
+	proxy, err = r.server.FindProxy(destination, except)
 	if err != nil {
 		slog.Error("find proxy:", err)
 	}
@@ -207,7 +212,7 @@ func (r *Router) updateProxyTo(destination string) {
 func (r *Router) dialProxyContext(ctx context.Context, peer string) (net.Conn, error) {
 	conn, err := r.server.DialPeerContext(ctx, peer)
 	if err != nil {
-		go r.updateProxyTo(peer)
+		go r.updateProxy(peer, false)
 	}
 	return conn, err
 }
