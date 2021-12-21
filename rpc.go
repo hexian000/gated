@@ -90,10 +90,13 @@ type rpcResult struct {
 	err   error
 }
 
-func (s *Server) Broadcast(ctx context.Context, method string, args interface{}, replyType reflect.Type) <-chan rpcResult {
+func (s *Server) Broadcast(ctx context.Context, method, except string, args interface{}, replyType reflect.Type) <-chan rpcResult {
 	wg := sync.WaitGroup{}
 	ch := make(chan rpcResult, 10)
 	for name, p := range s.getPeers() {
+		if name == except {
+			continue
+		}
 		if info, connected := p.PeerInfo(); !info.Online ||
 			(!connected && info.Address == "") {
 			continue

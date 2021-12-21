@@ -143,7 +143,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		_ = p.GoAway()
 	}
 	s.canceller.CancelAll()
-	for call := range s.Broadcast(ctx, "RPC.Update", s.ClusterInfo(), reflect.TypeOf(proto.Cluster{})) {
+	for call := range s.Broadcast(ctx, "RPC.Update", "", s.ClusterInfo(), reflect.TypeOf(proto.Cluster{})) {
 		if call.err != nil {
 			slog.Debugf("call RPC.Update: %v", call.err)
 			continue
@@ -171,7 +171,7 @@ func (s *Server) FindProxy(peer string) (string, error) {
 	}
 	list := make([]proxy, 0)
 	start := time.Now()
-	for result := range s.Broadcast(ctx, "RPC.Ping", &proto.Ping{
+	for result := range s.Broadcast(ctx, "RPC.Ping", peer, &proto.Ping{
 		Source:      s.LocalPeerName(),
 		Destination: peer,
 		TTL:         2,
@@ -336,7 +336,7 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		writef("\nPeer %q\n", name)
 		writef("    %-16s  %q\n", "Address:", info.Address)
 		if connected {
-			writef("    %-16s  %v\n", "Connected:", connected)
+			writef("    %-16s  %s\n", "LastConnected:", "now")
 		} else {
 			writef("    %-16s  %s\n", "LastConnected:", formatSince(now, p.LastUsed()))
 		}
