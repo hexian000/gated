@@ -56,6 +56,12 @@ func (p *peer) PeerInfo() (info proto.PeerInfo, connected bool) {
 	return p.info, p.mux != nil && !p.mux.IsClosed()
 }
 
+func (p *peer) GetMeter() *util.MeteredConn {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.meter
+}
+
 func (p *peer) SetOnline(online bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

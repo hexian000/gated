@@ -340,7 +340,12 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		writef("\nPeer %q\n", name)
 		writef("    %-16s  %q\n", "Address:", info.Address)
 		if connected {
-			writef("    %-16s  %s\n", "LastConnected:", "now")
+			lastUsed := p.LastUsed()
+			if now.Sub(lastUsed) < 2*tickInterval {
+				writef("    %-16s  %s\n", "LastUsed:", "(recently)")
+			} else {
+				writef("    %-16s  %s\n", "LastUsed:", formatSince(now, lastUsed))
+			}
 		} else {
 			writef("    %-16s  %s\n", "LastConnected:", formatSince(now, p.LastUsed()))
 		}
@@ -352,7 +357,7 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		}
 		writef("    %-16s  %s\n", "Created:", formatSince(now, p.Created()))
 		writef("    %-16s  %s\n", "LastUpdated:", formatSince(now, p.LastUpdate()))
-		if meter := p.meter; meter != nil {
+		if meter := p.GetMeter(); meter != nil {
 			read, written := meter.Count()
 			writef("    %-16s  %s / %s\n", "Bandwidth(U/D):", formatIEC(written), formatIEC(read))
 		}
