@@ -21,7 +21,6 @@ import (
 
 func (p *peer) call(conn net.Conn, deadline time.Time, method string, args interface{}, reply interface{}) error {
 	conn.SetDeadline(deadline)
-	defer conn.SetDeadline(time.Time{})
 	host := p.cfg.GetFQDN(apiHost)
 	req := &http.Request{
 		Method: http.MethodConnect,
@@ -32,7 +31,7 @@ func (p *peer) call(conn net.Conn, deadline time.Time, method string, args inter
 		Header: map[string][]string{},
 		Host:   host,
 	}
-	if err := req.WriteProxy(conn); err != nil {
+	if err := req.Write(conn); err != nil {
 		slog.Debug("rpc call:", err)
 		return err
 	}
@@ -46,6 +45,7 @@ func (p *peer) call(conn net.Conn, deadline time.Time, method string, args inter
 		return fmt.Errorf("rpc call: %v", resp.Status)
 	}
 	client := rpc.NewClient(conn)
+	defer client.Close()
 	return client.Call(method, args, reply)
 }
 
@@ -55,7 +55,6 @@ func (p *peer) Call(ctx context.Context, method string, args interface{}, reply 
 		slog.Error("rpc call:", err)
 		return err
 	}
-	defer conn.Close()
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		deadline = time.Time{}
