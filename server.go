@@ -304,8 +304,10 @@ func (s *Server) maintenance() {
 			ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 			defer s.canceller.Cancel(ctx)
 			var cluster proto.Cluster
-			s.RandomCall(ctx, "RPC.Update", s.ClusterInfo(), &cluster)
-			s.MergeCluster(&cluster)
+			if err := s.RandomCall(ctx, "RPC.Update", s.ClusterInfo(), &cluster); err != nil {
+				slog.Error("redial:", err)
+			}
+			_ = s.MergeCluster(&cluster)
 		}()
 	}
 }
