@@ -111,7 +111,9 @@ func (s *Server) MergeCluster(cluster *proto.Cluster) bool {
 		s.router.update(cluster.Self.Hosts, cluster.Self.PeerName)
 	}
 	for _, info := range cluster.Peers {
-		changed = changed || s.updatePeerInfo(&info)
+		if s.updatePeerInfo(&info) {
+			changed = true
+		}
 	}
 	s.router.merge(cluster.Routes)
 	return changed

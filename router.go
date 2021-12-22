@@ -78,6 +78,7 @@ func (r *Router) merge(routes map[string]string) {
 	defer r.mu.Unlock()
 	for host, peer := range routes {
 		r.routes[host] = peer
+		slog.Verbosef("merge route: %q via %q", host, peer)
 	}
 }
 
@@ -86,6 +87,7 @@ func (r *Router) update(hosts []string, peer string) {
 	defer r.mu.Unlock()
 	for _, host := range hosts {
 		r.routes[host] = peer
+		slog.Verbosef("update route: %q via %q", host, peer)
 	}
 }
 

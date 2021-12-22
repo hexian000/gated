@@ -235,7 +235,6 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 		return err
 	}
 	slog.Verbosef("bootstrap %v: reply: %v", connId, cluster)
-	info = cluster.Self
 	p.server.router.setProxy(info.PeerName, "")
 	go p.serveAPI(muxConn)
 	func() {
@@ -246,7 +245,7 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 		p.meter = meteredConn
 		p.lastUsed = now
 		p.lastUpdate = now
-		p.info = info
+		p.info = cluster.Self
 	}()
 	slog.Infof("dial %v: ok, remote name: %s, setup: %v", connId, info.PeerName, time.Since(setupBegin))
 	p.server.addPeer(p)
