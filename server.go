@@ -267,31 +267,46 @@ func (s *Server) maintenance() {
 	connectedCount := 0
 	for _, p := range s.getPeers() {
 		info, connected := p.PeerInfo()
+		peerHasAddr := info.Address != ""
 		if connected {
 			p.checkNumStreams()
-			if (selfHasAddr && info.Address != "") &&
+			if selfHasAddr && peerHasAddr &&
 				time.Since(p.LastUsed()) > idleTimeout {
 				slog.Infof("idle timeout expired: %q", info.PeerName)
 				_ = p.Close()
 			} else {
 				connectedCount++
 			}
-		} else if !selfHasAddr && info.Online && info.Address != "" {
-			slog.Infof("redial %q: %q", info.PeerName, info.Address)
-			go func(p *peer) {
-				ctx := s.canceller.WithTimeout(s.cfg.Timeout())
-				defer s.canceller.Cancel(ctx)
-				if err := p.Bootstrap(ctx); err != nil {
-					slog.Errorf("redial %q: %v", info.PeerName, err)
+		} else if info.Online {
+			if time.Since(p.LastUpdate()) > peerInfoTimeout {
+				slog.Infof("peer info timeout expired: %q", info.PeerName)
+				p.SetOnline(false)
+				continue
+			}
+			if !peerHasAddr {
+				if !s.router.hasProxy(info.PeerName) {
+					go s.router.updateProxy(info.PeerName, false)
 				}
-			}(p)
-		} else if time.Since(p.LastUpdate()) > peerInfoTimeout {
-			slog.Infof("peer info timeout expired: %q", info.PeerName)
-			p.SetOnline(false)
+			} else if !selfHasAddr {
+				slog.Infof("redial %q: %q", info.PeerName, info.Address)
+				go func(p *peer) {
+					ctx := s.canceller.WithTimeout(s.cfg.Timeout())
+					defer s.canceller.Cancel(ctx)
+					if err := p.Bootstrap(ctx); err != nil {
+						slog.Errorf("redial %q: %v", info.PeerName, err)
+					}
+				}(p)
+			}
 		}
 	}
 	if connectedCount < 1 {
-		s.BootstrapFromConfig()
+		go func() {
+			ctx := s.canceller.WithTimeout(s.cfg.Timeout())
+			defer s.canceller.Cancel(ctx)
+			var cluster proto.Cluster
+			s.RandomCall(ctx, "RPC.Update", s.ClusterInfo(), &cluster)
+			s.MergeCluster(&cluster)
+		}()
 	}
 }
 

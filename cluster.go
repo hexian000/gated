@@ -41,7 +41,7 @@ func (s *Server) getPeer(name string) *peer {
 }
 
 func (s *Server) addPeer(peer *peer) {
-	info, connected := peer.PeerInfo()
+	info, _ := peer.PeerInfo()
 	slog.Debugf("add peer: %s", info.PeerName)
 	func() {
 		s.mu.Lock()
@@ -52,9 +52,6 @@ func (s *Server) addPeer(peer *peer) {
 		s.peers[info.PeerName] = peer
 	}()
 	s.router.update(info.Hosts, info.PeerName)
-	if !connected && info.Address == "" {
-		s.router.updateProxy(info.PeerName, false)
-	}
 }
 
 // func (s *Server) deletePeer(name string) {

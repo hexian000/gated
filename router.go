@@ -144,6 +144,13 @@ func (r *Router) Proxy(req *http.Request) (*url.URL, error) {
 	return r.Resolve(req.URL.Hostname())
 }
 
+func (r *Router) hasProxy(destination string) bool {
+	r.proxyMu.RLock()
+	defer r.proxyMu.RUnlock()
+	_, ok := r.proxy[destination]
+	return ok
+}
+
 func (r *Router) getProxy(destination string, timeout time.Duration) string {
 	r.proxyMu.RLock()
 	defer r.proxyMu.RUnlock()
