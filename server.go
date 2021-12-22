@@ -346,7 +346,7 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 				numStreams = mux.NumStreams()
 			}
 			if numStreams > 0 {
-				writef("    %-16s  %s\n", "NumStreams:", numStreams)
+				writef("    %-16s  %v\n", "NumStreams:", numStreams)
 			} else {
 				writef("    %-16s  %s\n", "LastUsed:", formatSince(now, lastUsed))
 			}
