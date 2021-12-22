@@ -339,20 +339,20 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		info, connected := p.PeerInfo()
 		writef("\nPeer %q\n", name)
 		writef("    %-16s  %q\n", "Address:", info.Address)
+		status := "disconnected"
 		if connected {
-			lastUsed := p.LastUsed()
 			numStreams := 0
 			if mux := p.MuxSession(); mux != nil && !mux.IsClosed() {
 				numStreams = mux.NumStreams()
 			}
 			if numStreams > 0 {
-				writef("    %-16s  %v\n", "NumStreams:", numStreams)
+				status = fmt.Sprintf("%d streams", numStreams)
 			} else {
-				writef("    %-16s  %s\n", "LastUsed:", formatSince(now, lastUsed))
+				status = "idle"
 			}
-		} else {
-			writef("    %-16s  %s\n", "LastConnected:", formatSince(now, p.LastUsed()))
 		}
+		writef("    %-16s  %s\n", "Status:", status)
+		writef("    %-16s  %s\n", "LastUsed:", formatSince(now, p.LastUsed()))
 		writef("    %-16s  %v\n", "Online:", info.Online)
 		if proxy := s.router.getProxy(name, cacheTimeout); proxy == "" {
 			writef("    %-16s  %s\n", "Proxy:", "(direct)")

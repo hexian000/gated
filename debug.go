@@ -101,7 +101,7 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 			writef := func(format string, a ...interface{}) {
 				_, _ = w.WriteString(fmt.Sprintf(format, a...))
 			}
-			writef("%q: Address=%q, Connected=%v, LastConnected=%v\n", info.PeerName, info.Address, connected, formatSince(start, p.LastUsed()))
+			writef("%q: Address=%q, Connected=%v, LastUsed=%v\n", info.PeerName, info.Address, connected, formatSince(start, p.LastUsed()))
 			ctx := h.s.canceller.WithTimeout(h.s.cfg.Timeout())
 			defer h.s.canceller.Cancel(ctx)
 			start := time.Now()
