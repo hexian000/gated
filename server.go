@@ -341,8 +341,12 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		writef("    %-16s  %q\n", "Address:", info.Address)
 		if connected {
 			lastUsed := p.LastUsed()
-			if now.Sub(lastUsed) < 2*tickInterval {
-				writef("    %-16s  %s\n", "LastUsed:", "(recently)")
+			numStreams := 0
+			if mux := p.MuxSession(); mux != nil && !mux.IsClosed() {
+				numStreams = mux.NumStreams()
+			}
+			if numStreams > 0 {
+				writef("    %-16s  %s\n", "NumStreams:", numStreams)
 			} else {
 				writef("    %-16s  %s\n", "LastUsed:", formatSince(now, lastUsed))
 			}

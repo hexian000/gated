@@ -91,6 +91,12 @@ func (p *peer) LastUsed() time.Time {
 	return p.lastUsed
 }
 
+func (p *peer) MuxSession() *yamux.Session {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.mux
+}
+
 func (p *peer) LastUpdate() time.Time {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
