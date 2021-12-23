@@ -66,6 +66,7 @@ func (p *peer) SetOnline(online bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.info.Online = online
+	p.lastUpdate = time.Now()
 }
 
 func (p *peer) checkNumStreams() {
