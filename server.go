@@ -414,7 +414,11 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		} else {
 			writef("\nPeer %q (offline)\n", name)
 		}
-		writef("    %-16s  %q\n", "Address:", info.Address)
+		if info.Address != "" {
+			writef("    %-16s  %q\n", "Address:", info.Address)
+		} else {
+			writef("    %-16s  %s\n", "Address:", "(unreachable)")
+		}
 		lastUsed := p.LastUsed()
 		status := "disconnected"
 		if connected {
@@ -429,8 +433,6 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 			} else {
 				status = "idle, " + now.Sub(lastUsed).String()
 			}
-		} else if info.Address == "" {
-			status = "unreachable"
 		}
 		writef("    %-16s  %s\n", "Status:", status)
 		writef("    %-16s  %s\n", "LastUsed:", formatAgo(now, lastUsed))
