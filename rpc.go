@@ -133,7 +133,7 @@ func (r *RPC) Bootstrap(args *proto.Cluster, reply *proto.Cluster) error {
 	r.router.setProxy(args.Self.PeerName, "")
 	r.peer.info = args.Self
 	r.server.MergeCluster(args)
-	go r.server.broatcastUpdate(args)
+	go r.server.broadcastUpdate(args)
 	r.server.addPeer(r.peer)
 	*reply = *r.server.ClusterInfo()
 	return nil
@@ -142,7 +142,7 @@ func (r *RPC) Bootstrap(args *proto.Cluster, reply *proto.Cluster) error {
 func (r *RPC) Update(args *proto.Cluster, reply *proto.Cluster) error {
 	slog.Verbosef("RPC.Update: %v", args)
 	if r.server.MergeCluster(args) {
-		go r.server.broatcastUpdate(args)
+		go r.server.broadcastUpdate(args)
 	}
 	*reply = *r.server.ClusterInfo()
 	return nil

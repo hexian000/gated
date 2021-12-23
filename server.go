@@ -345,14 +345,14 @@ func (s *Server) watchdog() {
 			if now.Sub(last) > 2*tickInterval {
 				slog.Warning("system hang detected, tick time:", now.Sub(last))
 				s.closeAllSessions()
-				go s.broatcastUpdate(s.ClusterInfo())
+				go s.broadcastUpdate(s.ClusterInfo())
 				lastUpdate = now
 				last = now
 				continue
 			}
 			if now.Sub(lastUpdate) > updateInterval {
 				slog.Debug("periodic: update")
-				go s.broatcastUpdate(s.ClusterInfo())
+				go s.broadcastUpdate(s.ClusterInfo())
 				lastUpdate = now
 			}
 			last = now

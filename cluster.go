@@ -123,7 +123,7 @@ func (s *Server) MergeCluster(cluster *proto.Cluster) bool {
 	return changed
 }
 
-func (s *Server) broatcastUpdate(args *proto.Cluster) {
+func (s *Server) broadcastUpdate(args *proto.Cluster) {
 	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 	defer s.canceller.Cancel(ctx)
 	for call := range s.Broadcast(ctx, "RPC.Update", args.Self.PeerName, args, reflect.TypeOf(proto.Cluster{})) {
