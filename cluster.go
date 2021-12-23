@@ -6,6 +6,7 @@ import (
 
 	"github.com/hexian000/gated/proto"
 	"github.com/hexian000/gated/slog"
+	"github.com/hexian000/gated/version"
 )
 
 func (s *Server) self() *proto.PeerInfo {
@@ -24,6 +25,7 @@ func (s *Server) self() *proto.PeerInfo {
 	}
 	return &proto.PeerInfo{
 		Timestamp:  timestamp,
+		Version:    version.Version(),
 		PeerName:   cfg.Name,
 		Online:     online,
 		ServerName: cfg.ServerName,

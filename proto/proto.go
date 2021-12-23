@@ -2,6 +2,7 @@ package proto
 
 type PeerInfo struct {
 	Timestamp  int64    `json:"timestamp"`
+	Version    string   `json:"version"`
 	PeerName   string   `json:"name"`
 	Online     bool     `json:"online"`
 	ServerName string   `json:"sni,omitempty"`
