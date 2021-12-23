@@ -268,6 +268,7 @@ func (p *peer) Close() (err error) {
 	defer p.mu.RUnlock()
 	if p.mux != nil {
 		err = p.mux.Close()
+		p.mux = nil
 	}
 	return
 }
