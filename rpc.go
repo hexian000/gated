@@ -62,12 +62,12 @@ func (p *peer) Call(ctx context.Context, method string, args interface{}, reply 
 	return p.call(conn, deadline, method, args, reply)
 }
 
-func (s *Server) RandomCall(ctx context.Context, method string, args interface{}, reply interface{}) error {
+func (s *Server) randomRedial() error {
 	p := func() *peer {
 		set := make([]*peer, 0)
 		for _, p := range s.getPeers() {
 			info, connected := p.PeerInfo()
-			if info.Address != "" || connected {
+			if info.Address != "" && !connected {
 				set = append(set, p)
 			}
 		}
@@ -77,10 +77,13 @@ func (s *Server) RandomCall(ctx context.Context, method string, args interface{}
 		return set[rand.Intn(len(set))]
 	}()
 	if p == nil {
-		return errors.New("no connected peer")
+		return errors.New("no available peer")
 	}
-	slog.Debugf("ramdom calling %q", p.info.PeerName)
-	return p.Call(ctx, method, args, reply)
+	slog.Debugf("random redial: %q", p.info.PeerName)
+	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
+	defer s.canceller.Cancel(ctx)
+	_, err := p.Bootstrap(ctx)
+	return err
 }
 
 type rpcResult struct {

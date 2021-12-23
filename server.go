@@ -165,22 +165,29 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func (s *Server) bootstrapAll() {
+func (s *Server) bootstrapAll() <-chan error {
 	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 	defer s.canceller.Cancel(ctx)
+	ch := make(chan error, 10)
 	wg := &sync.WaitGroup{}
 	for _, p := range s.getPeers() {
 		wg.Add(1)
 		go func(p *peer) {
 			defer wg.Done()
-			_, _ = p.Bootstrap(ctx)
+			_, err := p.Bootstrap(ctx)
+			ch <- err
 		}(p)
 	}
-	wg.Wait()
+	go func() {
+		defer close(ch)
+		wg.Wait()
+	}()
+	return ch
 }
 
 func (s *Server) FindProxy(peer string, tryDirect bool) (string, error) {
-	s.bootstrapAll()
+	for range s.bootstrapAll() {
+	}
 	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 	defer s.canceller.Cancel(ctx)
 	type proxy struct {
@@ -283,16 +290,18 @@ func (s *Server) maintenance() {
 	cfg := s.cfg.Current()
 	selfHasAddr := cfg.AdvertiseAddr != ""
 	idleTimeout := time.Duration(cfg.Transport.IdleTimeout) * time.Second
-	if operational, _ := s.checkStatus(); !operational {
-		ctx := s.canceller.WithTimeout(s.cfg.Timeout())
-		defer s.canceller.Cancel(ctx)
-		var cluster proto.Cluster
-		if err := s.RandomCall(ctx, "RPC.Update", s.ClusterInfo(), &cluster); err != nil {
+	if count, _ := s.checkStatus(); count < 2 {
+		if err := s.randomRedial(); err != nil {
 			slog.Error("random redial:", err)
-			s.BootstrapFromConfig()
-			return
+			if count < 1 {
+				for err := range s.bootstrapAll() {
+					if err == nil {
+						return
+					}
+				}
+				s.BootstrapFromConfig()
+			}
 		}
-		_ = s.MergeCluster(&cluster)
 		return
 	}
 	for name, p := range s.getPeers() {
@@ -363,7 +372,7 @@ func (s *Server) watchdog() {
 	}
 }
 
-func (s *Server) checkStatus() (bool, time.Time) {
+func (s *Server) checkStatus() (int, time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	count := 0
@@ -377,7 +386,7 @@ func (s *Server) checkStatus() (bool, time.Time) {
 		s.operational = operational
 		s.statusChanged = time.Now()
 	}
-	return s.operational, s.statusChanged
+	return count, s.statusChanged
 }
 
 func (s *Server) CollectMetrics(w *bufio.Writer) {
@@ -386,9 +395,9 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		_, _ = w.WriteString(fmt.Sprintf(format, a...))
 	}
 	func() {
-		operational, statusChanged := s.checkStatus()
+		count, statusChanged := s.checkStatus()
 		status := "Outage"
-		if operational {
+		if count > 0 {
 			status = "Operating Normally"
 		}
 		writef("Status: %s, %v\n\n", status, time.Since(statusChanged))
