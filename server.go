@@ -346,15 +346,29 @@ func (s *Server) watchdog() {
 
 func (s *Server) CollectMetrics(w *bufio.Writer) {
 	now := time.Now()
+	writef := func(format string, a ...interface{}) {
+		_, _ = w.WriteString(fmt.Sprintf(format, a...))
+	}
+	peers := s.getPeers()
+
+	writef("Status: %s\n\n", func() string {
+		count := 0
+		for _, p := range peers {
+			if info, connected := p.PeerInfo(); info.Online && connected {
+				count++
+			}
+		}
+		if count < 1 {
+			return "Outage"
+		}
+		return "Operating Normally"
+	}())
 	(&metric.Runtime{}).CollectMetrics(w)
 	_, _ = w.WriteString("\n")
 
-	writef := func(format string, a ...interface{}) {
-		w.WriteString(fmt.Sprintf(format, a...))
-	}
 	_, _ = w.WriteString("=== Peers ===\n")
 	cacheTimeout := s.cfg.CacheTimeout()
-	for name, p := range s.getPeers() {
+	for name, p := range peers {
 		info, connected := p.PeerInfo()
 		if info.Online {
 			writef("\nPeer %q\n", name)
