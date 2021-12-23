@@ -91,7 +91,7 @@ func (s *Server) BootstrapFromConfig() {
 		go func() {
 			ctx := s.canceller.WithTimeout(timeout)
 			defer s.canceller.Cancel(ctx)
-			if err := p.Bootstrap(ctx); err != nil {
+			if _, err := p.Bootstrap(ctx); err != nil {
 				slog.Error("start:", err)
 			}
 		}()
@@ -292,7 +292,7 @@ func (s *Server) maintenance() {
 				go func(p *peer) {
 					ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 					defer s.canceller.Cancel(ctx)
-					if err := p.Bootstrap(ctx); err != nil {
+					if _, err := p.Bootstrap(ctx); err != nil {
 						slog.Errorf("redial %q: %v", info.PeerName, err)
 					}
 				}(p)
@@ -305,7 +305,9 @@ func (s *Server) maintenance() {
 			defer s.canceller.Cancel(ctx)
 			var cluster proto.Cluster
 			if err := s.RandomCall(ctx, "RPC.Update", s.ClusterInfo(), &cluster); err != nil {
-				slog.Error("redial:", err)
+				slog.Error("random redial:", err)
+				s.BootstrapFromConfig()
+				return
 			}
 			_ = s.MergeCluster(&cluster)
 		}()
