@@ -26,8 +26,8 @@ func (c *MeteredConn) Write(b []byte) (n int, err error) {
 	return
 }
 
-func (c *MeteredConn) Count() (read uint64, write uint64) {
+func (c *MeteredConn) Count() (read uint64, written uint64) {
 	read = atomic.LoadUint64(&c.r)
-	write = atomic.LoadUint64(&c.w)
+	written = atomic.LoadUint64(&c.w)
 	return
 }

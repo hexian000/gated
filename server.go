@@ -354,7 +354,11 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 	cacheTimeout := s.cfg.CacheTimeout()
 	for name, p := range s.getPeers() {
 		info, connected := p.PeerInfo()
-		writef("\nPeer %q\n", name)
+		if info.Online {
+			writef("\nPeer %q\n", name)
+		} else {
+			writef("\nPeer %q (offline)\n", name)
+		}
 		writef("    %-16s  %q\n", "Address:", info.Address)
 		status := "disconnected"
 		if connected {
@@ -370,7 +374,6 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		}
 		writef("    %-16s  %s\n", "Status:", status)
 		writef("    %-16s  %s\n", "LastUsed:", formatSince(now, p.LastUsed()))
-		writef("    %-16s  %v\n", "Online:", info.Online)
 		if proxy := s.router.getProxy(name, cacheTimeout); proxy == "" {
 			writef("    %-16s  %s\n", "Proxy:", "(direct)")
 		} else {
