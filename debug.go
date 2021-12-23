@@ -14,11 +14,11 @@ import (
 	"github.com/hexian000/gated/version"
 )
 
-func formatSince(now, last time.Time) string {
+func formatAgo(now, last time.Time) string {
 	if last == (time.Time{}) {
 		return "(never)"
 	}
-	return fmt.Sprintf("%s (since %v)", now.Sub(last), last)
+	return fmt.Sprintf("%v (%v ago)", last, now.Sub(last))
 }
 
 func Int64Log2(x uint64) int {
@@ -101,7 +101,7 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 			writef := func(format string, a ...interface{}) {
 				_, _ = w.WriteString(fmt.Sprintf(format, a...))
 			}
-			writef("%q: Address=%q, Connected=%v, LastUsed=%v\n", info.PeerName, info.Address, connected, formatSince(start, p.LastUsed()))
+			writef("%q: Address=%q, Connected=%v, LastUsed=%v\n", info.PeerName, info.Address, connected, formatAgo(start, p.LastUsed()))
 			ctx := h.s.canceller.WithTimeout(h.s.cfg.Timeout())
 			defer h.s.canceller.Cancel(ctx)
 			start := time.Now()
