@@ -35,8 +35,10 @@ type peer struct {
 }
 
 func newPeer(s *Server) *peer {
+	now := time.Now()
 	return &peer{
-		created:     time.Now(),
+		created:     now,
+		lastUpdate:  now,
 		bootstrapCh: make(chan struct{}, 1),
 		server:      s,
 		cfg:         s.cfg,

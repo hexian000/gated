@@ -19,7 +19,7 @@ func (s *Server) self() *proto.PeerInfo {
 	select {
 	case <-s.shutdownCh:
 		online = false
-		timestamp = time.Now().UnixMilli()
+		timestamp++
 	default:
 	}
 	return &proto.PeerInfo{
@@ -97,7 +97,6 @@ func (s *Server) updatePeerInfo(info *proto.PeerInfo) bool {
 	slog.Debug("peer info add:", info)
 	p := newPeer(s)
 	p.info = *info
-	p.lastUpdate = time.Now()
 	s.addPeer(p)
 	return true
 }
