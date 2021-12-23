@@ -35,10 +35,8 @@ type peer struct {
 }
 
 func newPeer(s *Server) *peer {
-	now := time.Now()
 	return &peer{
-		created:     now,
-		lastUpdate:  now,
+		created:     time.Now(),
 		bootstrapCh: make(chan struct{}, 1),
 		server:      s,
 		cfg:         s.cfg,
@@ -250,7 +248,7 @@ func (p *peer) Bootstrap(ctx context.Context) error {
 		p.lastUpdate = now
 		p.info = cluster.Self
 	}()
-	slog.Infof("dial %v: ok, remote name: %s, setup: %v", connId, info.PeerName, time.Since(setupBegin))
+	slog.Infof("dial %v: ok, remote name: %q, setup: %v", connId, info.PeerName, time.Since(setupBegin))
 	p.server.addPeer(p)
 	p.server.MergeCluster(&cluster)
 	return nil

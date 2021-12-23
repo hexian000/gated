@@ -2,6 +2,7 @@ package gated
 
 import (
 	"reflect"
+	"time"
 
 	"github.com/hexian000/gated/proto"
 	"github.com/hexian000/gated/slog"
@@ -38,6 +39,11 @@ func (s *Server) getPeer(name string) *peer {
 }
 
 func (s *Server) addPeer(peer *peer) {
+	func() {
+		peer.mu.Lock()
+		defer peer.mu.Unlock()
+		peer.lastUpdate = time.Now()
+	}()
 	info, _ := peer.PeerInfo()
 	slog.Debugf("add peer: %s", info.PeerName)
 	func() {
