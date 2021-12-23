@@ -8,24 +8,22 @@ import (
 	"github.com/hexian000/gated/slog"
 )
 
-func NewTimestamp() int64 {
-	return time.Now().UnixMilli()
-}
-
 func (s *Server) self() *proto.PeerInfo {
 	cfg := s.cfg.Current()
 	hosts := []string(nil)
 	for host := range cfg.Hosts {
 		hosts = append(hosts, host)
 	}
+	timestamp := s.cfg.Timestamp()
 	online := true
 	select {
 	case <-s.shutdownCh:
 		online = false
+		timestamp = time.Now().UnixMilli()
 	default:
 	}
 	return &proto.PeerInfo{
-		Timestamp:  NewTimestamp(),
+		Timestamp:  timestamp,
 		PeerName:   cfg.Name,
 		Online:     online,
 		ServerName: cfg.ServerName,

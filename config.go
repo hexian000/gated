@@ -17,6 +17,8 @@ type Config struct {
 	mu   sync.RWMutex
 	tls  *tls.Config
 	mux  *yamux.Config
+
+	timestamp time.Time
 }
 
 func NewConfig(cfg *config.Main) (*Config, error) {
@@ -83,7 +85,14 @@ func (c *Config) Load(cfg *config.Main) error {
 	c.main = cfg
 	c.tls = tlsCfg
 	c.mux = muxCfg
+	c.timestamp = time.Now()
 	return nil
+}
+
+func (c *Config) Timestamp() int64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.timestamp.UnixMilli()
 }
 
 func (c *Config) SetConnParams(conn net.Conn) {
