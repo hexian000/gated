@@ -165,7 +165,22 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+func (s *Server) bootstrapAll() {
+	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
+	defer s.canceller.Cancel(ctx)
+	wg := &sync.WaitGroup{}
+	for _, p := range s.getPeers() {
+		wg.Add(1)
+		go func(p *peer) {
+			defer wg.Done()
+			_, _ = p.Bootstrap(ctx)
+		}(p)
+	}
+	wg.Wait()
+}
+
 func (s *Server) FindProxy(peer string, tryDirect bool) (string, error) {
+	s.bootstrapAll()
 	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 	defer s.canceller.Cancel(ctx)
 	type proxy struct {
