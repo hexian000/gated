@@ -2,7 +2,6 @@ package gated
 
 import (
 	"reflect"
-	"time"
 
 	"github.com/hexian000/gated/proto"
 	"github.com/hexian000/gated/slog"
