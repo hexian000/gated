@@ -84,7 +84,9 @@ func (s *Server) ClusterInfo() *proto.Cluster {
 			defer s.mu.RUnlock()
 			peers := make(map[string]proto.PeerInfo)
 			for name, peer := range s.peers {
-				peers[name] = peer.info
+				if peer.IsOnline() {
+					peers[name] = peer.info
+				}
 			}
 			return peers
 		}(),
