@@ -402,6 +402,8 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 			} else {
 				status = "idle"
 			}
+		} else if info.Address == "" {
+			status = "unreachable"
 		}
 		writef("    %-16s  %s\n", "Status:", status)
 		writef("    %-16s  %s\n", "LastUsed:", formatAgo(now, p.LastUsed()))
