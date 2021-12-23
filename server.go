@@ -406,6 +406,7 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 			writef("\nPeer %q (offline)\n", name)
 		}
 		writef("    %-16s  %q\n", "Address:", info.Address)
+		lastUsed := p.LastUsed()
 		status := "disconnected"
 		if connected {
 			numStreams := 0
@@ -414,14 +415,16 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 			}
 			if numStreams > 0 {
 				status = fmt.Sprintf("%d streams", numStreams)
+			} else if info.Address == "" {
+				status = "linger"
 			} else {
-				status = "idle"
+				status = "idle, " + now.Sub(lastUsed).String()
 			}
 		} else if info.Address == "" {
 			status = "unreachable"
 		}
 		writef("    %-16s  %s\n", "Status:", status)
-		writef("    %-16s  %s\n", "LastUsed:", formatAgo(now, p.LastUsed()))
+		writef("    %-16s  %s\n", "LastUsed:", formatAgo(now, lastUsed))
 		if proxy := s.router.getProxy(name, cacheTimeout); proxy == "" {
 			writef("    %-16s  %s\n", "Proxy:", "(direct)")
 		} else {
