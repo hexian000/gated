@@ -3,7 +3,6 @@ package gated
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
