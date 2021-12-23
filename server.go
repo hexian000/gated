@@ -36,6 +36,9 @@ type Server struct {
 	tlsListener  net.Listener
 	httpListener net.Listener
 
+	operational   bool
+	statusChanged time.Time
+
 	shutdownCh chan struct{}
 }
 
@@ -51,6 +54,7 @@ func NewServer(cfg *Config) *Server {
 			ReadHeaderTimeout: timeout,
 			ErrorLog:          newHTTPLogger(),
 		},
+		statusChanged: time.Now(),
 	}
 	s.handler = newAPIHandler(s, nil)
 	s.router = NewRouter(cfg.main.Domain, cfg.main.Routes.Default, s, cfg.main.Hosts)
@@ -344,31 +348,42 @@ func (s *Server) watchdog() {
 	}
 }
 
+func (s *Server) checkStatus() (bool, time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	count := 0
+	for _, p := range s.peers {
+		if info, connected := p.PeerInfo(); info.Online && connected {
+			count++
+		}
+	}
+	operational := count > 0
+	if s.operational != operational {
+		s.operational = operational
+		s.statusChanged = time.Now()
+	}
+	return s.operational, s.statusChanged
+}
+
 func (s *Server) CollectMetrics(w *bufio.Writer) {
 	now := time.Now()
 	writef := func(format string, a ...interface{}) {
 		_, _ = w.WriteString(fmt.Sprintf(format, a...))
 	}
-	peers := s.getPeers()
-
-	writef("Status: %s\n\n", func() string {
-		count := 0
-		for _, p := range peers {
-			if info, connected := p.PeerInfo(); info.Online && connected {
-				count++
-			}
+	func() {
+		operational, statusChanged := s.checkStatus()
+		status := "Outage"
+		if operational {
+			status = "Operating Normally"
 		}
-		if count < 1 {
-			return "Outage"
-		}
-		return "Operating Normally"
-	}())
+		writef("Status: %s, %v\n\n", status, time.Since(statusChanged))
+	}()
 	(&metric.Runtime{}).CollectMetrics(w)
 	_, _ = w.WriteString("\n")
 
 	_, _ = w.WriteString("=== Peers ===\n")
 	cacheTimeout := s.cfg.CacheTimeout()
-	for name, p := range peers {
+	for name, p := range s.getPeers() {
 		info, connected := p.PeerInfo()
 		if info.Online {
 			writef("\nPeer %q\n", name)
