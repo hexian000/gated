@@ -445,6 +445,7 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 			read, written := meter.Count()
 			writef("    %-16s  %s / %s\n", "Bandwidth(U/D):", formatIEC(written), formatIEC(read))
 		}
+		writef("    %-16s  %s\n", "Version:", info.Version)
 	}
 	_, _ = w.WriteString("\n")
 
