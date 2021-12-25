@@ -15,7 +15,7 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
 fi
 echo "+ version: ${VERSION}"
 
-GOFLAGS="-trimpath -mod vendor"
+GOFLAGS="-trimpath"
 LDFLAGS=""
 if [ -n "${VERSION}" ]; then
     LDFLAGS="${LDFLAGS} -X github.com/hexian000/gated/version.tag=${VERSION}"
@@ -28,6 +28,7 @@ case "$1" in
     # cross build for all supported targets
     # not supported targets are likely to work
     set -x
+    go mod vendor
     GOOS="linux" GOARCH="arm64" nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.linux-arm64 cmd/gated/main.go
     GOOS="linux" GOARCH="arm" GOARM=7 nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.linux-armv7 cmd/gated/main.go
     GOOS="linux" GOARCH="amd64" nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.linux-amd64 cmd/gated/main.go
@@ -36,6 +37,7 @@ case "$1" in
 *)
     # build for native system only
     set -x
+    go mod vendor
     nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated cmd/gated/main.go
     ;;
 esac
