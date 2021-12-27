@@ -44,7 +44,9 @@ func (s *Server) addPeer(peer *peer) {
 	func() {
 		peer.mu.Lock()
 		defer peer.mu.Unlock()
-		peer.lastUpdate = time.Now()
+		now := time.Now()
+		peer.connected = now
+		peer.lastUpdate = now
 	}()
 	info, _ := peer.PeerInfo()
 	slog.Debugf("add peer: %s", info.PeerName)

@@ -23,6 +23,7 @@ type peer struct {
 	info  proto.PeerInfo
 
 	created    time.Time
+	connected  time.Time
 	lastUsed   time.Time
 	lastUpdate time.Time
 
@@ -89,6 +90,12 @@ func (p *peer) Created() time.Time {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.created
+}
+
+func (p *peer) Connected() time.Time {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.connected
 }
 
 func (p *peer) LastUsed() time.Time {
@@ -244,7 +251,6 @@ func (p *peer) Bootstrap(ctx context.Context) (*yamux.Session, error) {
 		p.mux = muxConn
 		p.meter = meteredConn
 		p.lastUsed = now
-		p.lastUpdate = now
 		p.info = cluster.Self
 	}()
 	slog.Infof("dial %v: ok, remote name: %q, setup: %v", connId, info.PeerName, time.Since(setupBegin))
