@@ -281,7 +281,8 @@ func (s *Server) closeAllSessions() {
 const (
 	tickInterval    = 1 * time.Minute
 	updateInterval  = 2 * time.Hour
-	peerInfoTimeout = 8 * time.Hour
+	offlineTimeout  = 8 * time.Hour
+	peerInfoTimeout = 24 * time.Hour
 )
 
 func (s *Server) maintenance() {
@@ -305,8 +306,11 @@ func (s *Server) maintenance() {
 	for name, p := range s.getPeers() {
 		info, connected := p.PeerInfo()
 		if !info.Online {
-			s.deletePeer(name)
-			s.router.deletePeer(name)
+			if time.Since(p.LastUpdate()) > peerInfoTimeout {
+				slog.Infof("peer info timeout expired: %q", info.PeerName)
+				s.deletePeer(name)
+				s.router.deletePeer(name)
+			}
 			continue
 		}
 		peerHasAddr := info.Address != ""
@@ -319,8 +323,8 @@ func (s *Server) maintenance() {
 			}
 			continue
 		}
-		if time.Since(p.LastUpdate()) > peerInfoTimeout {
-			slog.Infof("peer info timeout expired: %q", info.PeerName)
+		if time.Since(p.LastUpdate()) > offlineTimeout {
+			slog.Infof("offline timeout expired: %q", info.PeerName)
 			p.SetOnline(false)
 			continue
 		}
