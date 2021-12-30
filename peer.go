@@ -62,19 +62,6 @@ func (p *peer) GetMeter() *util.MeteredConn {
 	return p.meter
 }
 
-func (p *peer) IsOnline() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.info.Online
-}
-
-func (p *peer) SetOnline(online bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.info.Online = online
-	p.lastUpdate = time.Now()
-}
-
 func (p *peer) checkNumStreams() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
