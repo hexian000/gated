@@ -281,7 +281,6 @@ func (s *Server) closeAllSessions() {
 const (
 	tickInterval    = 1 * time.Minute
 	updateInterval  = 2 * time.Hour
-	offlineTimeout  = 8 * time.Hour
 	peerInfoTimeout = 24 * time.Hour
 )
 
@@ -321,11 +320,6 @@ func (s *Server) maintenance() {
 				slog.Infof("idle timeout expired: %q", info.PeerName)
 				_ = p.Close()
 			}
-			continue
-		}
-		if time.Since(p.LastUpdate()) > offlineTimeout {
-			slog.Infof("offline timeout expired: %q", info.PeerName)
-			p.SetOnline(false)
 			continue
 		}
 		if !peerHasAddr && !s.router.hasProxy(info.PeerName) {
