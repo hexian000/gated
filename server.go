@@ -52,7 +52,6 @@ func NewServer(cfg *Config) *Server {
 			ReadHeaderTimeout: timeout,
 			ErrorLog:          newHTTPLogger(),
 		},
-		statusChanged: time.Now(),
 	}
 	s.handler = newAPIHandler(s, nil)
 	s.router = NewRouter(cfg.main.Domain, cfg.main.Routes.Default, s, cfg.main.Hosts)
