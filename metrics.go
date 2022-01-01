@@ -58,13 +58,13 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 			}
 		}
 		writef("    %-16s  %s\n", "Status:", status)
-		writef("    %-16s  %s\n", "LastUsed:", formatAgo(now, lastUsed))
 		if proxy := s.router.getProxy(name, cacheTimeout); proxy == "" {
 			writef("    %-16s  %s\n", "Proxy:", "(direct)")
 		} else {
 			writef("    %-16s  %q\n", "Proxy:", proxy)
 		}
 		writef("    %-16s  %s\n", "LastSeen:", formatAgo(now, p.LastSeen()))
+		writef("    %-16s  %s\n", "LastUsed:", formatAgo(now, lastUsed))
 		writef("    %-16s  %s\n", "LastUpdated:", formatAgo(now, p.LastUpdate()))
 		if meter := p.GetMeter(); meter != nil {
 			read, written := meter.Count()
