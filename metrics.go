@@ -14,10 +14,14 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		_, _ = w.WriteString(fmt.Sprintf(format, a...))
 	}
 	func() {
-		count, statusChanged := s.checkStatus()
-		status := "Outage"
-		if count > 0 {
+		operational, statusChanged := s.getStatus()
+		status := "Just Started"
+		if statusChanged == (time.Time{}) {
+			statusChanged = metric.StartTime()
+		} else if operational {
 			status = "Operating Normally"
+		} else {
+			status = "Outage"
 		}
 		writef("Status: %s, %v\n\n", status, time.Since(statusChanged))
 	}()
@@ -48,7 +52,7 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 			if numStreams > 0 {
 				status = fmt.Sprintf("%d streams", numStreams)
 			} else if info.Address == "" {
-				status = "linger"
+				status = "linger, " + now.Sub(lastUsed).String()
 			} else {
 				status = "idle, " + now.Sub(lastUsed).String()
 			}

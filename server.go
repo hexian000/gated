@@ -288,20 +288,6 @@ func (s *Server) maintenance() {
 	cfg := s.cfg.Current()
 	selfHasAddr := cfg.AdvertiseAddr != ""
 	idleTimeout := time.Duration(cfg.Transport.IdleTimeout) * time.Second
-	if count, _ := s.checkStatus(); count < 2 {
-		if err := s.randomRedial(); err != nil {
-			slog.Error("random redial:", err)
-			if count < 1 {
-				for err := range s.bootstrapAll() {
-					if err == nil {
-						return
-					}
-				}
-				s.BootstrapFromConfig()
-			}
-		}
-		return
-	}
 	for name, p := range s.getPeers() {
 		info, connected := p.PeerInfo()
 		if !info.Online {
@@ -336,6 +322,20 @@ func (s *Server) maintenance() {
 			}(p)
 		}
 	}
+	if count, _ := s.updateStatus(); count < 2 {
+		if err := s.randomRedial(); err != nil {
+			slog.Error("random redial:", err)
+			if count < 1 {
+				for err := range s.bootstrapAll() {
+					if err == nil {
+						return
+					}
+				}
+				s.BootstrapFromConfig()
+			}
+		}
+		return
+	}
 }
 
 func (s *Server) watchdog() {
@@ -368,7 +368,7 @@ func (s *Server) watchdog() {
 	}
 }
 
-func (s *Server) checkStatus() (int, time.Time) {
+func (s *Server) updateStatus() (int, time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	count := 0
@@ -383,4 +383,10 @@ func (s *Server) checkStatus() (int, time.Time) {
 		s.statusChanged = time.Now()
 	}
 	return count, s.statusChanged
+}
+
+func (s *Server) getStatus() (bool, time.Time) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.operational, s.statusChanged
 }

@@ -13,6 +13,10 @@ func init() {
 	startTime = time.Now()
 }
 
+func StartTime() time.Time {
+	return startTime
+}
+
 type Runtime struct{}
 
 var _ = Metrical(&Runtime{})
