@@ -2,7 +2,6 @@ package gated
 
 import (
 	"reflect"
-	"time"
 
 	"github.com/hexian000/gated/proto"
 	"github.com/hexian000/gated/slog"
@@ -40,25 +39,19 @@ func (s *Server) getPeer(name string) *peer {
 	return s.peers[name]
 }
 
-func (s *Server) addPeer(peer *peer) {
-	func() {
-		peer.mu.Lock()
-		defer peer.mu.Unlock()
-		now := time.Now()
-		peer.connected = now
-		peer.lastUpdate = now
-	}()
-	info, _ := peer.PeerInfo()
+func (s *Server) addPeer(p *peer) {
+	info, _ := p.PeerInfo()
 	slog.Debugf("add peer: %s", info.PeerName)
 	func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		if p, ok := s.peers[info.PeerName]; ok && p != peer {
-			_ = p.Close()
+		if o, ok := s.peers[info.PeerName]; ok && o != p {
+			_ = o.Close()
 		}
-		s.peers[info.PeerName] = peer
+		s.peers[info.PeerName] = p
 	}()
 	s.router.update(info.Hosts, info.PeerName)
+	p.updateStatus()
 }
 
 func (s *Server) deletePeer(name string) {

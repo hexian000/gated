@@ -22,8 +22,7 @@ type peer struct {
 	meter *util.MeteredConn
 	info  proto.PeerInfo
 
-	created    time.Time
-	connected  time.Time
+	lastSeen   time.Time
 	lastUsed   time.Time
 	lastUpdate time.Time
 
@@ -36,7 +35,6 @@ type peer struct {
 
 func newPeer(s *Server) *peer {
 	return &peer{
-		created:     time.Now(),
 		bootstrapCh: make(chan struct{}, 1),
 		server:      s,
 		cfg:         s.cfg,
@@ -62,27 +60,23 @@ func (p *peer) GetMeter() *util.MeteredConn {
 	return p.meter
 }
 
-func (p *peer) checkNumStreams() {
+func (p *peer) updateStatus() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.mux == nil || p.mux.IsClosed() {
 		return
 	}
+	now := time.Now()
+	p.lastSeen = now
 	if p.mux.NumStreams() > 0 {
-		p.lastUsed = time.Now()
+		p.lastUsed = now
 	}
 }
 
-func (p *peer) Created() time.Time {
+func (p *peer) LastSeen() time.Time {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return p.created
-}
-
-func (p *peer) Connected() time.Time {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.connected
+	return p.lastSeen
 }
 
 func (p *peer) LastUsed() time.Time {
@@ -115,23 +109,8 @@ func (p *peer) UpdateInfo(info *proto.PeerInfo) bool {
 	return false
 }
 
-func (p *peer) Open() (net.Conn, error) {
-	mux := func() *yamux.Session {
-		p.mu.RLock()
-		defer p.mu.RUnlock()
-		return p.mux
-	}()
-	if mux == nil {
-		return nil, fmt.Errorf("peer %s is not connected", p.info.PeerName)
-	}
-	conn, err := p.mux.Open()
-	if err == nil {
-		p.lastUsed = time.Now()
-	}
-	return conn, err
-}
-
 func (p *peer) DialContext(ctx context.Context) (net.Conn, error) {
+	defer p.updateStatus()
 	mux := p.MuxSession()
 	if mux == nil || mux.IsClosed() {
 		var err error
@@ -140,15 +119,7 @@ func (p *peer) DialContext(ctx context.Context) (net.Conn, error) {
 			return nil, err
 		}
 	}
-	conn, err := mux.Open()
-	if err == nil {
-		func() {
-			p.mu.Lock()
-			defer p.mu.Unlock()
-			p.lastUsed = time.Now()
-		}()
-	}
-	return conn, err
+	return mux.Open()
 }
 
 func (p *peer) newHandler() http.Handler {
@@ -234,10 +205,8 @@ func (p *peer) Bootstrap(ctx context.Context) (*yamux.Session, error) {
 	func() {
 		p.mu.Lock()
 		defer p.mu.Unlock()
-		now := time.Now()
 		p.mux = muxConn
 		p.meter = meteredConn
-		p.lastUsed = now
 		p.info = cluster.Self
 	}()
 	slog.Infof("dial %v: ok, remote name: %q, setup: %v", connId, info.PeerName, time.Since(setupBegin))

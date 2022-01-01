@@ -60,8 +60,7 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		} else {
 			writef("    %-16s  %q\n", "Proxy:", proxy)
 		}
-		writef("    %-16s  %s\n", "Created:", formatAgo(now, p.Created()))
-		writef("    %-16s  %s\n", "Connected:", formatAgo(now, p.Connected()))
+		writef("    %-16s  %s\n", "LastSeen:", formatAgo(now, p.LastSeen()))
 		writef("    %-16s  %s\n", "LastUpdated:", formatAgo(now, p.LastUpdate()))
 		if meter := p.GetMeter(); meter != nil {
 			read, written := meter.Count()
