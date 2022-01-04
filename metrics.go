@@ -3,6 +3,7 @@ package gated
 import (
 	"bufio"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/hexian000/gated/metric"
@@ -30,7 +31,14 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 
 	_, _ = w.WriteString("=== Peers ===\n")
 	cacheTimeout := s.cfg.CacheTimeout()
-	for name, p := range s.getPeers() {
+	peers := s.getPeers()
+	names := make([]string, 0, len(peers))
+	for name := range peers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		p := peers[name]
 		info, connected := p.PeerInfo()
 		if info.Online {
 			writef("\nPeer %q\n", name)

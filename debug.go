@@ -7,6 +7,7 @@ import (
 	"math/bits"
 	"net/http"
 	"reflect"
+	"sort"
 	"sync"
 	"time"
 
@@ -90,9 +91,15 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 	_, _ = w.WriteString(version.WebBanner(h.s.LocalPeerName()))
 
 	_, _ = w.WriteString("=== Peers ===\n\n")
+	peers := h.s.getPeers()
+	names := make([]string, 0, len(peers))
+	for name := range peers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
 	wg := sync.WaitGroup{}
 	ch := make(chan string, 10)
-	for _, p := range h.s.getPeers() {
+	for _, name := range names {
 		wg.Add(1)
 		go func(p *peer) {
 			defer wg.Done()
@@ -120,7 +127,7 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 			}
 			_, _ = w.WriteString("\n")
 			ch <- w.String()
-		}(p)
+		}(peers[name])
 	}
 	go func() {
 		wg.Wait()
