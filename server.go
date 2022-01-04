@@ -259,14 +259,8 @@ func (s *Server) serve(tcpConn net.Conn) {
 		return
 	}
 	p := newPeer(s)
-	func() {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		p.mux = muxConn
-		p.meter = meteredConn
-	}()
+	p.Bind(muxConn, meteredConn)
 	slog.Infof("serve %v: rpc online, setup: %v", connId, time.Since(setupBegin))
-	p.serveAPI(muxConn)
 }
 
 func (s *Server) closeAllSessions() {
@@ -299,7 +293,7 @@ func (s *Server) maintenance() {
 		}
 		peerHasAddr := info.Address != ""
 		if connected {
-			p.updateStatus()
+			p.Seen()
 			if selfHasAddr && peerHasAddr &&
 				time.Since(p.LastUsed()) > idleTimeout {
 				slog.Infof("idle timeout expired: %q", info.PeerName)

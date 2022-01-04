@@ -134,10 +134,11 @@ type RPC struct {
 func (r *RPC) Bootstrap(args *proto.Cluster, reply *proto.Cluster) error {
 	slog.Verbosef("RPC.Bootstrap: %v", args)
 	r.router.setProxy(args.Self.PeerName, "")
-	r.peer.info = args.Self
+	r.peer.UpdateInfo(&args.Self)
+	r.peer.Seen()
+	r.server.addPeer(r.peer)
 	r.server.MergeCluster(args)
 	go r.server.broadcastUpdate(args)
-	r.server.addPeer(r.peer)
 	*reply = *r.server.ClusterInfo()
 	return nil
 }

@@ -51,7 +51,6 @@ func (s *Server) addPeer(p *peer) {
 		s.peers[info.PeerName] = p
 	}()
 	s.router.update(info.Hosts, info.PeerName)
-	p.updateStatus()
 }
 
 func (s *Server) deletePeer(name string) {
@@ -101,7 +100,7 @@ func (s *Server) updatePeerInfo(info *proto.PeerInfo) bool {
 	}
 	slog.Debug("peer info add:", info)
 	p := newPeer(s)
-	p.info = *info
+	p.UpdateInfo(info)
 	s.addPeer(p)
 	if info.Address == "" {
 		go s.router.updateProxy(info.PeerName, false)

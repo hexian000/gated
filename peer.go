@@ -60,7 +60,7 @@ func (p *peer) GetMeter() *util.MeteredConn {
 	return p.meter
 }
 
-func (p *peer) updateStatus() {
+func (p *peer) Seen() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.mux == nil || p.mux.IsClosed() {
@@ -97,6 +97,19 @@ func (p *peer) LastUpdate() time.Time {
 	return p.lastUpdate
 }
 
+func (p *peer) Bind(mux *yamux.Session, meter *util.MeteredConn) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.mux != nil {
+		_ = p.mux.Close()
+	}
+	if p.meter != nil {
+		_ = p.meter.Close()
+	}
+	p.mux, p.meter = mux, meter
+	go p.serve(mux)
+}
+
 func (p *peer) UpdateInfo(info *proto.PeerInfo) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -110,7 +123,7 @@ func (p *peer) UpdateInfo(info *proto.PeerInfo) bool {
 }
 
 func (p *peer) DialContext(ctx context.Context) (net.Conn, error) {
-	defer p.updateStatus()
+	defer p.Seen()
 	mux := p.MuxSession()
 	if mux == nil || mux.IsClosed() {
 		var err error
@@ -134,13 +147,13 @@ func (p *peer) newHandler() http.Handler {
 	return newAPIHandler(p.server, rpcServer)
 }
 
-func (p *peer) serveAPI(mux *yamux.Session) {
+func (p *peer) serve(l net.Listener) {
 	server := &http.Server{
 		Handler:           p.newHandler(),
 		ReadHeaderTimeout: p.cfg.Timeout(),
 		ErrorLog:          newHTTPLogger(),
 	}
-	_ = server.Serve(mux)
+	_ = server.Serve(l)
 }
 
 func (p *peer) Bootstrap(ctx context.Context) (*yamux.Session, error) {
@@ -201,14 +214,9 @@ func (p *peer) Bootstrap(ctx context.Context) (*yamux.Session, error) {
 	}
 	slog.Verbosef("bootstrap %v: reply: %v", connId, cluster)
 	p.server.router.setProxy(info.PeerName, "")
-	go p.serveAPI(muxConn)
-	func() {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		p.mux = muxConn
-		p.meter = meteredConn
-		p.info = cluster.Self
-	}()
+	p.UpdateInfo(&cluster.Self)
+	p.Seen()
+	p.Bind(muxConn, meteredConn)
 	slog.Infof("dial %v: ok, remote name: %q, setup: %v", connId, info.PeerName, time.Since(setupBegin))
 	p.server.addPeer(p)
 	p.server.MergeCluster(&cluster)
