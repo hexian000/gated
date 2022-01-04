@@ -52,9 +52,6 @@ func (s *Server) addPeer(p *peer) {
 	}()
 	s.router.update(info.Hosts, info.PeerName)
 	p.updateStatus()
-	if info.Address == "" {
-		go s.router.updateProxy(info.PeerName, false)
-	}
 }
 
 func (s *Server) deletePeer(name string) {
@@ -106,6 +103,9 @@ func (s *Server) updatePeerInfo(info *proto.PeerInfo) bool {
 	p := newPeer(s)
 	p.info = *info
 	s.addPeer(p)
+	if info.Address == "" {
+		go s.router.updateProxy(info.PeerName, false)
+	}
 	return true
 }
 
