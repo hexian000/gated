@@ -48,15 +48,16 @@ const (
 	routeHost = "route.gated"
 )
 
-func NewRouter(domain string, defaultPeer string, server *Server, hosts map[string]string) *Router {
+func NewRouter(server *Server) *Router {
+	cfg := server.cfg.Current()
 	r := &Router{
 		routes:      make(map[string]string),
-		hosts:       hosts,
+		hosts:       cfg.Hosts,
 		apiDomain:   server.cfg.GetFQDN(apiHost),
 		routeDomain: server.cfg.GetFQDN(routeHost),
 		server:      server,
 		proxy:       make(map[string]peerProxy),
-		defaultPeer: defaultPeer,
+		defaultPeer: cfg.Routes.Default,
 	}
 	r.Transport = &http.Transport{
 		Proxy:             r.Proxy,
@@ -165,7 +166,7 @@ func (r *Router) getProxy(destination string, timeout time.Duration) string {
 	return info.proxy
 }
 
-func (r *Router) beginProxyQuery(destination string, timeout time.Duration) bool {
+func (r *Router) lockProxy(destination string) bool {
 	r.proxyMu.Lock()
 	defer r.proxyMu.Unlock()
 	info, ok := r.proxy[destination]
@@ -196,7 +197,7 @@ func (r *Router) setProxy(destination, proxy string) {
 }
 
 func (r *Router) updateProxy(destination string, tryDirect bool) {
-	if !r.beginProxyQuery(destination, r.server.cfg.CacheTimeout()) {
+	if !r.lockProxy(destination) {
 		return
 	}
 	proxy, err := r.server.FindProxy(destination, tryDirect)

@@ -54,7 +54,7 @@ func NewServer(cfg *Config) *Server {
 		},
 	}
 	s.handler = newAPIHandler(s, nil)
-	s.router = NewRouter(cfg.main.Domain, cfg.main.Routes.Default, s, cfg.main.Hosts)
+	s.router = NewRouter(s)
 	s.httpServer.Handler = s.handler
 	s.httpClient = &http.Client{
 		Transport: s.router.Transport,
@@ -306,9 +306,6 @@ func (s *Server) maintenance() {
 				_ = p.Close()
 			}
 			continue
-		}
-		if !peerHasAddr && !s.router.hasProxy(info.PeerName) {
-			go s.router.updateProxy(info.PeerName, false)
 		}
 		if peerHasAddr && !selfHasAddr {
 			slog.Infof("redial %q: %q", info.PeerName, info.Address)
