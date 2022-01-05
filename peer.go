@@ -113,10 +113,10 @@ func (p *peer) Bind(mux *yamux.Session, meter *util.MeteredConn) {
 func (p *peer) UpdateInfo(info *proto.PeerInfo) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.lastUpdate = time.Now()
 	if p.info.Timestamp < info.Timestamp {
 		slog.Debug("peer info update:", info)
 		p.info = *info
-		p.lastUpdate = time.Now()
 		return true
 	}
 	return false
