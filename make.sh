@@ -29,8 +29,9 @@ case "$1" in
     # not supported targets are likely to work
     set -x
     go mod vendor
-    GOOS="linux" GOARCH="arm64" nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.linux-arm64 cmd/gated/main.go
+    GOOS="linux" GOARCH="mipsle" GOMIPS="softfloat" nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.linux-mipsle cmd/gated/main.go
     GOOS="linux" GOARCH="arm" GOARM=7 nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.linux-armv7 cmd/gated/main.go
+    GOOS="linux" GOARCH="arm64" nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.linux-arm64 cmd/gated/main.go
     GOOS="linux" GOARCH="amd64" nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.linux-amd64 cmd/gated/main.go
     GOOS="windows" GOARCH="amd64" nice go build ${GOFLAGS} -ldflags "${LDFLAGS}" -o build/gated.windows-amd64.exe cmd/gated/main.go
     ;;
