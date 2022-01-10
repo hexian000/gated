@@ -74,6 +74,7 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		writef("    %-16s  %s\n", "LastSeen:", formatAgo(now, p.LastSeen()))
 		writef("    %-16s  %s\n", "LastUsed:", formatAgo(now, lastUsed))
 		writef("    %-16s  %s\n", "LastUpdated:", formatAgo(now, p.LastUpdate()))
+		writef("    %-16s  %v\n", "Timestamp:", info.Timestamp)
 		if meter := p.GetMeter(); meter != nil {
 			read, written := meter.Count()
 			writef("    %-16s  %s / %s\n", "Bandwidth(U/D):", formatIEC(written), formatIEC(read))
