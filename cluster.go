@@ -126,7 +126,7 @@ func (s *Server) MergeCluster(cluster *proto.Cluster) bool {
 func (s *Server) broadcastUpdate(args *proto.Cluster) {
 	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
 	defer s.canceller.Cancel(ctx)
-	for call := range s.BroadcastAll(ctx, "RPC.Update", args.Self.PeerName, args, reflect.TypeOf(proto.Cluster{})) {
+	for call := range s.Broadcast(ctx, "RPC.Update", args.Self.PeerName, true, args, reflect.TypeOf(proto.Cluster{})) {
 		if call.err != nil {
 			slog.Debugf("call RPC.Update: %v", call.err)
 			continue

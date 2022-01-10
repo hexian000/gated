@@ -144,7 +144,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		_ = p.GoAway()
 	}
 	s.canceller.CancelAll()
-	for call := range s.Broadcast(ctx, "RPC.Update", "", s.ClusterInfo(), reflect.TypeOf(proto.Cluster{})) {
+	for call := range s.Broadcast(ctx, "RPC.Update", "", false, s.ClusterInfo(), reflect.TypeOf(proto.Cluster{})) {
 		if call.err != nil {
 			slog.Debugf("call RPC.Update: %v", call.err)
 			continue
@@ -182,7 +182,7 @@ func (s *Server) bootstrapAll() <-chan error {
 	return ch
 }
 
-func (s *Server) FindProxy(peer string, tryDirect bool) (string, error) {
+func (s *Server) FindProxy(peer string, tryDirect, fast bool) (string, error) {
 	ctx := s.canceller.WithTimeout(pingTimeout)
 	defer s.canceller.Cancel(ctx)
 	type proxy struct {
@@ -196,17 +196,18 @@ func (s *Server) FindProxy(peer string, tryDirect bool) (string, error) {
 		except = ""
 	}
 	start := time.Now()
-	for result := range s.Broadcast(ctx, "RPC.Ping", except, &proto.Ping{
+	for result := range s.Broadcast(ctx, "RPC.Lookup", except, !fast, &proto.Lookup{
 		Source:      s.LocalPeerName(),
 		Destination: peer,
 		TTL:         2,
-	}, reflect.TypeOf(proto.Ping{})) {
+		Fast:        fast,
+	}, reflect.TypeOf(proto.Lookup{})) {
 		if result.err != nil {
 			continue
 		}
 		list = append(list, proxy{
 			name: result.from.Name(),
-			ttl:  result.reply.(*proto.Ping).TTL,
+			ttl:  result.reply.(*proto.Lookup).TTL,
 			rtt:  time.Since(start),
 		})
 	}

@@ -17,10 +17,11 @@ type Cluster struct {
 	Routes map[string]string   `json:"routes,omitempty"`
 }
 
-type Ping struct {
+type Lookup struct {
 	Source      string `json:"source"`
 	Destination string `json:"dest"`
 	TTL         int    `json:"ttl,omitempty"`
+	Fast        bool   `json:"fast"`
 }
 
 type None struct{}

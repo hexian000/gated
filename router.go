@@ -193,11 +193,9 @@ func (r *Router) updateProxy(destination string, tryDirect bool) {
 	if !r.lockProxy(destination) {
 		return
 	}
-	proxy, err := r.server.FindProxy(destination, tryDirect)
+	proxy, err := r.server.FindProxy(destination, tryDirect, true)
 	if err != nil {
-		for range r.server.bootstrapAll() {
-		}
-		proxy, err = r.server.FindProxy(destination, tryDirect)
+		proxy, err = r.server.FindProxy(destination, tryDirect, false)
 		if err != nil {
 			slog.Error("update proxy:", err)
 		}

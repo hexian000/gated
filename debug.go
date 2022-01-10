@@ -112,17 +112,18 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 			ctx := h.s.canceller.WithTimeout(h.s.cfg.Timeout())
 			defer h.s.canceller.Cancel(ctx)
 			start := time.Now()
-			for result := range h.s.BroadcastAll(ctx, "RPC.Ping", "", &proto.Ping{
+			for result := range h.s.Broadcast(ctx, "RPC.Lookup", "", true, &proto.Lookup{
 				Source:      h.s.LocalPeerName(),
 				Destination: info.PeerName,
 				TTL:         2,
-			}, reflect.TypeOf(proto.Ping{})) {
+				Fast:        false,
+			}, reflect.TypeOf(proto.Lookup{})) {
 				from := result.from.info.PeerName
 				if result.err != nil {
 					writef("    %v: error from %q: %s\n", time.Since(start), from, result.err.Error())
 					continue
 				}
-				reply := result.reply.(*proto.Ping)
+				reply := result.reply.(*proto.Lookup)
 				writef("    %v: reply from %q, TTL=%d\n", time.Since(start), from, reply.TTL)
 			}
 			_, _ = w.WriteString("\n")
