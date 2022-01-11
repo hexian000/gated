@@ -137,6 +137,7 @@ func (r *RPC) Bootstrap(args *proto.Cluster, reply *proto.Cluster) error {
 	r.peer.UpdateInfo(&args.Self)
 	r.peer.Seen()
 	r.server.addPeer(r.peer)
+	r.server.router.setProxy(args.Self.PeerName, "")
 	r.server.MergeCluster(args)
 	go r.server.broadcastUpdate(args)
 	*reply = *r.server.ClusterInfo()
