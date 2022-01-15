@@ -54,7 +54,7 @@ By default, all certificates are self-signed. This will not reduce security.
 
 ## Quick Start
 
-### 1. Generate key pair (or use your own):
+### 1. Generate new self-signed certificates with OpenSSL (or you may use existing ones):
 
 ```sh
 ./gencerts.sh peer1 peer2
@@ -71,6 +71,7 @@ gencerts.sh is in [cmd/gated](cmd/gated/gencerts.sh)
     "name": "peer1",
     "listen": ":50100",
     "addr": "203.0.113.1:50100",
+    "httplisten": "192.168.123.1:8080",
     "hosts": {
         "server.lan": "127.0.0.1"
     },
@@ -89,6 +90,7 @@ gencerts.sh is in [cmd/gated](cmd/gated/gencerts.sh)
 ```json
 {
     "name": "peer2",
+    "httplisten": ":8080",
     "servers": [
         {
             "addr": "203.0.113.1:50100"
@@ -111,6 +113,9 @@ gencerts.sh is in [cmd/gated](cmd/gated/gencerts.sh)
 #### Options
 
 - "name": peer name
+- "listen": listen address for other peers
+- "addr": advertised address for other peers to connect
+- "httplisten": listen address of the local HTTP proxy
 - "servers": bootstrap server info
 - "servers[\*].addr": bootstrap server address
 - "hosts": local hosts
@@ -130,6 +135,11 @@ see [config.json](config/config.json) for example config file
 ```
 
 You may also found the systemd user unit [gated.service](gated.service) is useful.
+
+
+### 4. Use
+
+Check http://api.gated.lan/status over the HTTP proxy for service status.
 
 ## Build/Install
 
