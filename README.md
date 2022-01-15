@@ -4,11 +4,15 @@
 
 ## What for
 
-gated is used for building HTTP proxy server clusters.
+gated is a HTTP proxy server which can place multiple hosts in different LANs in a same virtual domain. I personally use it to easily and securely access any service on my router/raspberry pi/server in different locations.
 
-Each peer can announce some host names (which are aliases of some local IP) in a global virtual domain, the cluster will forward the connections to proper peer.
+Each peer can publish some virtual host names (which are aliases of some local IP addresses or real host names) in a global virtual domain, then any peer will be able to connect to this host via the virtual host name.
 
-Peers without public IP address can also announce local services. In such case, another peer for reverse proxying will be chosen automatically.
+When a network failure occurs, some peers can't be directly connected, and gated may automatically choose a third peer that can reach both peers at the same time to forward the traffic.
+
+Peers without public IP address can also publish local services. In this case, a reverse proxy will be performed automatically.
+
+For now, this tool is only designed to handle small clusters.
 
 Traffic over untrusted network is carried by multiplexed mTLS tunnels.
 
