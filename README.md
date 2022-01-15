@@ -152,7 +152,7 @@ cd gated
 ```
 or
 ```sh
-go install github.com/hexian000/gated
+go install github.com/hexian000/gated/cmd/gated@latest
 ```
 
 ## Credits
