@@ -157,7 +157,7 @@ func (p *peer) serve(l net.Listener) {
 }
 
 func (p *peer) Bootstrap(ctx context.Context) (*yamux.Session, error) {
-	info, connected := p.PeerInfo()
+	info, _ := p.PeerInfo()
 	if info.Address == "" {
 		return nil, fmt.Errorf("peer %q has no address", info.PeerName)
 	}
@@ -168,8 +168,8 @@ func (p *peer) Bootstrap(ctx context.Context) (*yamux.Session, error) {
 	defer func() {
 		<-p.bootstrapCh
 	}()
-	if connected {
-		return p.MuxSession(), nil
+	if mux := p.MuxSession(); mux != nil && !mux.IsClosed() {
+		return mux, nil
 	}
 
 	slog.Verbosef("bootstrap: setup connection to %s", info.Address)
