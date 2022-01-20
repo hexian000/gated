@@ -4,7 +4,7 @@
 
 ## What for
 
-gated is a HTTP proxy server which can place multiple hosts in different LANs in a same virtual domain. I personally use it to easily and securely access any service on my router/raspberry pi/server in different locations.
+gated is a decentralized system that allows user to access multiple hosts in different LANs by creating a global virtual domain on a HTTP proxy server. I personally use it to easily and securely access any service on my router/raspberry pi/server in different locations.
 
 Each peer can publish some virtual host names (which are aliases of some local IP addresses or real host names) in a global virtual domain, then any peer will be able to connect to this host via the virtual host name.
 
