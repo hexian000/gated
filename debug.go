@@ -112,7 +112,7 @@ func (h *clusterHandler) ServeHTTP(respWriter http.ResponseWriter, req *http.Req
 			ctx := h.s.canceller.WithTimeout(h.s.cfg.Timeout())
 			defer h.s.canceller.Cancel(ctx)
 			start := time.Now()
-			for result := range h.s.Broadcast(ctx, "RPC.Ping", "", &proto.Ping{
+			for result := range h.s.BroadcastAll(ctx, "RPC.Ping", "", &proto.Ping{
 				Source:      h.s.LocalPeerName(),
 				Destination: info.PeerName,
 				TTL:         2,

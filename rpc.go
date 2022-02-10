@@ -99,6 +99,38 @@ func (s *Server) Broadcast(ctx context.Context, method, except string, args inte
 		if name == except {
 			continue
 		}
+		if !p.IsConnected() {
+			continue
+		}
+		wg.Add(1)
+		go func(name string, p *peer) {
+			defer wg.Done()
+			slog.Verbosef("broadcast %q on %q args: %v", method, name, args)
+			reply := reflect.New(replyType).Interface()
+			if err := p.Call(ctx, method, args, reply); err != nil {
+				slog.Errorf("broadcast %q error from %q: %v", method, name, err)
+				ch <- rpcResult{p, nil, err}
+				return
+			}
+			slog.Verbosef("broadcast %q reply from %q: %v", method, name, reply)
+			ch <- rpcResult{p, reply, nil}
+		}(name, p)
+	}
+	go func() {
+		wg.Wait()
+		slog.Verbosef("broadcast %q is done", method)
+		close(ch)
+	}()
+	return ch
+}
+
+func (s *Server) BroadcastAll(ctx context.Context, method, except string, args interface{}, replyType reflect.Type) <-chan rpcResult {
+	wg := sync.WaitGroup{}
+	ch := make(chan rpcResult, 10)
+	for name, p := range s.getPeers() {
+		if name == except {
+			continue
+		}
 		if info, connected := p.PeerInfo(); !info.Online ||
 			(!connected && info.Address == "") {
 			continue
@@ -153,26 +185,31 @@ func (r *RPC) Update(args *proto.Cluster, reply *proto.Cluster) error {
 	return nil
 }
 
+const pingTimeout = 2 * time.Second
+
 func (r *RPC) Ping(args *proto.Ping, reply *proto.Ping) error {
 	slog.Verbosef("RPC.Ping: %v", args)
-	name := r.server.LocalPeerName()
+	localName := r.server.LocalPeerName()
 	args.TTL--
-	if strings.EqualFold(name, args.Destination) {
+	if strings.EqualFold(localName, args.Destination) {
 		*reply = proto.Ping{
-			Source:      name,
+			Source:      localName,
 			Destination: args.Destination,
 			TTL:         args.TTL,
 		}
 		return nil
 	}
 	if args.TTL <= 0 {
-		return fmt.Errorf("reply from %s: destination is unreachable (TTL exceeded): %q", name, args.Destination)
+		return fmt.Errorf("reply from %s: destination is unreachable (TTL exceeded): %q", localName, args.Destination)
 	}
 	peer := r.server.getPeer(args.Destination)
 	if peer == nil {
-		return fmt.Errorf("reply from %s: destination is unreachable (name not resolved): %q", name, args.Destination)
+		return fmt.Errorf("reply from %s: destination is unreachable (name not resolved): %q", localName, args.Destination)
 	}
-	ctx := r.server.canceller.WithTimeout(r.peer.cfg.Timeout())
+	if !peer.IsConnected() {
+		return fmt.Errorf("reply from %s: destination is not connected: %q", localName, args.Destination)
+	}
+	ctx := r.server.canceller.WithTimeout(pingTimeout)
 	defer r.server.canceller.Cancel(ctx)
 	if err := peer.Call(ctx, "RPC.Ping", args, reply); err != nil {
 		return err

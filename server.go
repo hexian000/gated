@@ -183,9 +183,7 @@ func (s *Server) bootstrapAll() <-chan error {
 }
 
 func (s *Server) FindProxy(peer string, tryDirect bool) (string, error) {
-	for range s.bootstrapAll() {
-	}
-	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
+	ctx := s.canceller.WithTimeout(pingTimeout)
 	defer s.canceller.Cancel(ctx)
 	type proxy struct {
 		name string

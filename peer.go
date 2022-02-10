@@ -48,6 +48,12 @@ func (p *peer) Name() string {
 	return p.info.PeerName
 }
 
+func (p *peer) IsConnected() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.mux != nil && !p.mux.IsClosed()
+}
+
 func (p *peer) PeerInfo() (info proto.PeerInfo, connected bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

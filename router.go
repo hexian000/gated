@@ -195,7 +195,12 @@ func (r *Router) updateProxy(destination string, tryDirect bool) {
 	}
 	proxy, err := r.server.FindProxy(destination, tryDirect)
 	if err != nil {
-		slog.Error("update proxy:", err)
+		for range r.server.bootstrapAll() {
+		}
+		proxy, err = r.server.FindProxy(destination, tryDirect)
+		if err != nil {
+			slog.Error("update proxy:", err)
+		}
 	}
 	r.setProxy(destination, proxy)
 }
