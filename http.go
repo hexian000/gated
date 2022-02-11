@@ -76,8 +76,8 @@ var hopHeaders = [...]string{
 	"Keep-Alive",
 	"Proxy-Authenticate",
 	"Proxy-Authorization",
-	"Te",
-	"Trailers",
+	"TE",
+	"Trailer",
 	"Transfer-Encoding",
 	"Upgrade",
 }
