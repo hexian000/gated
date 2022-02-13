@@ -1,11 +1,14 @@
 package gated
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hexian000/gated/proxy"
 	"github.com/hexian000/gated/slog"
@@ -76,6 +79,7 @@ var hopHeaders = [...]string{
 	"Keep-Alive",
 	"Proxy-Authenticate",
 	"Proxy-Authorization",
+	"Proxy-Connection",
 	"TE",
 	"Trailer",
 	"Transfer-Encoding",
@@ -88,8 +92,84 @@ func delHopHeaders(header http.Header) {
 	}
 }
 
+var ErrUnsupportedTransferEncoding = errors.New("unsupported transfer encoding")
+
+// serveResponse serves HTTP response to http.ResponseWriter.
+func serveResponse(w http.ResponseWriter, resp *http.Response) error {
+	if resp.Body != nil {
+		defer resp.Body.Close()
+	}
+	h := w.Header()
+	for k, v := range resp.Header {
+		for _, v1 := range v {
+			h.Add(k, v1)
+		}
+	}
+	delHopHeaders(h)
+	if h.Get("Date") == "" {
+		h.Set("Date", time.Now().UTC().Format("Mon, 2 Jan 2006 15:04:05")+" GMT")
+	}
+	if h.Get("Content-Type") == "" && resp.ContentLength != 0 {
+		h.Set("Content-Type", "text/plain; charset=utf-8")
+	}
+	if resp.ContentLength >= 0 {
+		h.Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
+	} else {
+		h.Del("Content-Length")
+	}
+	te := ""
+	if len(resp.TransferEncoding) > 0 {
+		if len(resp.TransferEncoding) > 1 {
+			return ErrUnsupportedTransferEncoding
+		}
+		te = resp.TransferEncoding[0]
+	}
+	clientConnection := ""
+	if resp.Request != nil {
+		clientConnection = resp.Request.Header.Get("Connection")
+	}
+	switch clientConnection {
+	case "close":
+		h.Set("Connection", "close")
+	case "keep-alive":
+		if h.Get("Content-Length") != "" || te == "chunked" {
+			h.Set("Connection", "keep-alive")
+		} else {
+			h.Set("Connection", "close")
+		}
+	default:
+		if te == "chunked" {
+			h.Set("Connection", "close")
+		}
+	}
+	switch te {
+	case "":
+		w.WriteHeader(resp.StatusCode)
+		if resp.Body != nil {
+			if _, err := io.Copy(w, resp.Body); err != nil {
+				return err
+			}
+		}
+	case "chunked":
+		h.Set("Transfer-Encoding", "chunked")
+		h.Del("Content-Length")
+		w.WriteHeader(resp.StatusCode)
+		if resp.Body != nil {
+			if _, err := io.Copy(w, resp.Body); err != nil {
+				return err
+			}
+		}
+	default:
+		return ErrUnsupportedTransferEncoding
+	}
+	return nil
+}
+
 func (h *apiHandler) proxy(client *http.Client, w http.ResponseWriter, req *http.Request) {
-	req.RequestURI = ""
+	if req.URL.Scheme != "" && req.URL.Scheme != "http" {
+		webError(h.s, w, fmt.Sprintf("unsupported URL scheme: %s", req.URL.Scheme), http.StatusBadRequest)
+		return
+	}
 	delHopHeaders(req.Header)
 	if host, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
 		if prior, ok := req.Header["X-Forwarded-For"]; ok {
@@ -97,24 +177,17 @@ func (h *apiHandler) proxy(client *http.Client, w http.ResponseWriter, req *http
 		}
 		req.Header.Set("X-Forwarded-For", host)
 	}
+	req.RequestURI = ""
 	resp, err := client.Do(req)
 	if err != nil {
 		slog.Debug("http:", err)
 		h.gatewayError(w, err)
 		return
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	delHopHeaders(resp.Header)
-	for k, v := range resp.Header {
-		for _, i := range v {
-			w.Header().Add(k, i)
-		}
+	if err := serveResponse(w, resp); err != nil {
+		slog.Debug("http:", err)
+		return
 	}
-	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
 }
 
 // HTTP CONNECT
