@@ -222,9 +222,9 @@ func (p *peer) Bootstrap(ctx context.Context) (*yamux.Session, error) {
 	p.UpdateInfo(&cluster.Self)
 	p.Seen()
 	p.Bind(muxConn, meteredConn)
-	slog.Infof("dial %v: ok, remote name: %q, setup: %v", connId, info.PeerName, time.Since(setupBegin))
+	slog.Infof("dial %v: ok, remote name: %q, setup: %v", connId, cluster.Self.PeerName, time.Since(setupBegin))
 	p.server.addPeer(p)
-	p.server.router.setProxy(info.PeerName, "")
+	p.server.router.setProxy(cluster.Self.PeerName, "")
 	p.server.MergeCluster(&cluster)
 	return muxConn, nil
 }
