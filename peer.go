@@ -66,7 +66,7 @@ func (p *peer) GetMeter() *util.MeteredConn {
 	return p.meter
 }
 
-func (p *peer) Seen() {
+func (p *peer) Seen(used bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.mux == nil || p.mux.IsClosed() {
@@ -74,7 +74,7 @@ func (p *peer) Seen() {
 	}
 	now := time.Now()
 	p.lastSeen = now
-	if p.mux.NumStreams() > 0 {
+	if used || p.mux.NumStreams() > 0 {
 		p.lastUsed = now
 	}
 }
@@ -128,14 +128,13 @@ func (p *peer) UpdateInfo(info *proto.PeerInfo) bool {
 	return false
 }
 
-func (p *peer) DialContext(ctx context.Context) (net.Conn, error) {
-	defer p.Seen()
+func (p *peer) DialContext(ctx context.Context) (conn net.Conn, err error) {
+	defer p.Seen(err == nil)
 	mux := p.MuxSession()
 	if mux == nil || mux.IsClosed() {
-		var err error
 		mux, err = p.Bootstrap(ctx)
 		if err != nil {
-			return nil, err
+			return
 		}
 	}
 	return mux.Open()
@@ -220,7 +219,7 @@ func (p *peer) Bootstrap(ctx context.Context) (*yamux.Session, error) {
 	}
 	slog.Verbosef("bootstrap %v: reply: %v", connId, cluster)
 	p.UpdateInfo(&cluster.Self)
-	p.Seen()
+	p.Seen(true)
 	p.Bind(muxConn, meteredConn)
 	slog.Infof("dial %v: ok, remote name: %q, setup: %v", connId, cluster.Self.PeerName, time.Since(setupBegin))
 	p.server.addPeer(p)

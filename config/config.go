@@ -23,6 +23,11 @@ type Transport struct {
 	StreamWindow      uint32 `json:"window"`
 }
 
+type Socks5 struct {
+	Listen  string `json:"listen"`
+	Forward string `json:"forward"`
+}
+
 type Server struct {
 	ServerName string `json:"sni"`
 	Address    string `json:"addr"`
@@ -48,6 +53,8 @@ type Main struct {
 	Auth      Auth      `json:"auth"`
 	Transport Transport `json:"transport"`
 
+	Socks5 []Socks5 `json:"socks5"`
+
 	LogLevel int    `json:"loglevel"`
 	Log      string `json:"log"`
 }
@@ -65,7 +72,7 @@ func New() *Main {
 			KeepAliveInterval: 15,
 			Timeout:           15,
 			WriteTimeout:      15,
-			IdleTimeout:       15 * 60,
+			IdleTimeout:       72 * 60 * 60,
 			StreamWindow:      256 * 1024,
 		},
 		LogLevel: slog.LevelInfo,

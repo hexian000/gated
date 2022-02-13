@@ -292,7 +292,7 @@ func (s *Server) maintenance() {
 		}
 		peerHasAddr := info.Address != ""
 		if connected {
-			p.Seen()
+			p.Seen(false)
 			if selfHasAddr && peerHasAddr &&
 				time.Since(p.LastUsed()) > idleTimeout {
 				slog.Infof("idle timeout expired: %q", info.PeerName)

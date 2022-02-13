@@ -135,7 +135,7 @@ func (r *RPC) Bootstrap(args *proto.Cluster, reply *proto.Cluster) error {
 	slog.Verbosef("RPC.Bootstrap: %v", args)
 	r.router.setProxy(args.Self.PeerName, "")
 	r.peer.UpdateInfo(&args.Self)
-	r.peer.Seen()
+	r.peer.Seen(true)
 	r.server.addPeer(r.peer)
 	r.server.router.setProxy(args.Self.PeerName, "")
 	r.server.MergeCluster(args)
