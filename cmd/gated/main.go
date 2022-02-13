@@ -22,19 +22,12 @@ var _ = version.Version
 func parseFlags() string {
 	var flagHelp bool
 	var flagConfig string
-	var flagVerbose bool
 	flag.BoolVar(&flagHelp, "h", false, "help")
 	flag.StringVar(&flagConfig, "c", "", "config file")
-	flag.BoolVar(&flagVerbose, "v", false, "verbose mode")
 	flag.Parse()
 	if flagHelp || flagConfig == "" {
 		flag.Usage()
 		os.Exit(1)
-	}
-	if flagVerbose {
-		slog.Default().SetLevel(slog.LevelVerbose)
-	} else {
-		slog.Default().SetLevel(slog.LevelInfo)
 	}
 	return flagConfig
 }
