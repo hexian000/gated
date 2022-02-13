@@ -4,12 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
-	"runtime"
-	"strconv"
 	"sync"
-	"sync/atomic"
-	"time"
 )
 
 const (
@@ -30,8 +25,8 @@ var levelChar = [...]byte{
 
 type Logger struct {
 	out   io.Writer
-	mu    sync.Mutex
-	level int32
+	mu    sync.RWMutex
+	level int
 	buf   []byte
 }
 
@@ -42,43 +37,15 @@ func Default() *Logger {
 }
 
 func (l *Logger) SetLevel(level int) {
-	atomic.StoreInt32(&l.level, int32(level))
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.level = level
 }
 
 func (l *Logger) SetOutput(out io.Writer) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.out = out
-}
-
-func (l *Logger) Output(calldepth int, level int, s string) {
-	now := time.Now()
-	if level < int(atomic.LoadInt32(&l.level)) {
-		return
-	}
-	_, file, line, ok := runtime.Caller(calldepth)
-	if !ok {
-		file, line = "???", 0
-	} else {
-		file = path.Base(file)
-	}
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	buf := l.buf[:0]
-	buf = append(buf, levelChar[level], ' ')
-	buf = now.AppendFormat(buf, ISO8601Milli)
-	buf = append(buf, ' ')
-	buf = append(buf, file...)
-	buf = append(buf, ':')
-	buf = strconv.AppendInt(buf, int64(line), 10)
-	buf = append(buf, ' ')
-	buf = append(buf, s...)
-	if len(s) == 0 || s[len(s)-1] != '\n' {
-		buf = append(buf, '\n')
-	}
-	l.buf = buf
-	l.out.Write(buf)
 }
 
 func (l *Logger) Verbose(v ...interface{}) {
