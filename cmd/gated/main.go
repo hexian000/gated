@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"io/ioutil"
-	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -53,20 +52,6 @@ func readConfig(path string) (*config.Main, error) {
 	return cfg, nil
 }
 
-func setUDPLog(addr string) error {
-	if addr == "" {
-		slog.Default().SetOutput(os.Stderr)
-		return nil
-	}
-	conn, err := net.Dial("udp", addr)
-	if err != nil {
-		return err
-	}
-	slog.Verbose("logging to", addr)
-	slog.Default().SetOutput(conn)
-	return nil
-}
-
 func main() {
 	path := parseFlags()
 	cfg, err := readConfig(path)
@@ -79,7 +64,8 @@ func main() {
 		slog.Fatal("load config:", err)
 		os.Exit(1)
 	}
-	if err := setUDPLog(cfg.UDPLog); err != nil {
+	slog.Default().SetLevel(cfg.LogLevel)
+	if err := slog.Default().ParseOutput(cfg.Log, "gated"); err != nil {
 		slog.Fatal("logging:", err)
 		os.Exit(1)
 	}
@@ -102,16 +88,17 @@ func main() {
 		}
 		// reload
 		_, _ = daemon.Notify(daemon.Reloading)
-		newCfg, err := readConfig(path)
+		cfg, err := readConfig(path)
 		if err != nil {
 			slog.Error("read config:", err)
 			continue
 		}
-		if err := setUDPLog(newCfg.UDPLog); err != nil {
+		slog.Default().SetLevel(cfg.LogLevel)
+		if err := slog.Default().ParseOutput(cfg.Log, "gated"); err != nil {
 			slog.Error("logging:", err)
 			continue
 		}
-		if err := c.Load(newCfg); err != nil {
+		if err := c.Load(cfg); err != nil {
 			slog.Error("load config:", err)
 			continue
 		}

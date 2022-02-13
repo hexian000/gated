@@ -3,6 +3,8 @@ package config
 import (
 	"encoding/json"
 	"io/ioutil"
+
+	"github.com/hexian000/gated/slog"
 )
 
 type Auth struct {
@@ -46,7 +48,8 @@ type Main struct {
 	Auth      Auth      `json:"auth"`
 	Transport Transport `json:"transport"`
 
-	UDPLog string `json:"udplog"`
+	LogLevel int    `json:"loglevel"`
+	Log      string `json:"log"`
 }
 
 func New() *Main {
@@ -65,6 +68,8 @@ func New() *Main {
 			IdleTimeout:       15 * 60,
 			StreamWindow:      256 * 1024,
 		},
+		LogLevel: slog.LevelInfo,
+		Log:      "stderr",
 	}
 }
 
