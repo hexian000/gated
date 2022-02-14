@@ -330,18 +330,19 @@ func (s *Server) maintenance() {
 func (s *Server) watchdog() {
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
-	last := time.Now()
-	lastUpdate := last
+	lastTick := time.Now()
+	lastUpdate := lastTick
 	for {
 		select {
 		case <-ticker.C:
 			now := time.Now()
-			if now.Sub(last) > 2*tickInterval {
-				slog.Warning("system hang detected, tick time:", now.Sub(last))
+			tickInterval := now.Sub(lastTick)
+			lastTick = now
+			if tickInterval > 2*tickInterval {
+				slog.Warning("system hang detected, tick time:", now.Sub(lastTick))
 				s.closeAllSessions()
 				go s.broadcastUpdate(s.ClusterInfo())
 				lastUpdate = now
-				last = now
 				continue
 			}
 			if now.Sub(lastUpdate) > updateInterval {
@@ -349,7 +350,6 @@ func (s *Server) watchdog() {
 				go s.broadcastUpdate(s.ClusterInfo())
 				lastUpdate = now
 			}
-			last = now
 			s.maintenance()
 		case <-s.shutdownCh:
 			return
