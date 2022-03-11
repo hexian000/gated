@@ -180,6 +180,7 @@ func (r *Router) setProxy(destination, proxy string) {
 	defer r.proxyMu.Unlock()
 	if proxy == "" || proxy == destination {
 		delete(r.proxy, destination)
+		defer slog.Infof("connections to %q now goes direct", destination)
 		return
 	}
 	r.proxy[destination] = peerProxy{
@@ -187,6 +188,7 @@ func (r *Router) setProxy(destination, proxy string) {
 		proxy:   proxy,
 		updated: time.Now(),
 	}
+	defer slog.Infof("connections to %q now goes %q", destination, proxy)
 }
 
 func (r *Router) updateProxy(destination string, tryDirect bool) {
