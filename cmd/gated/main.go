@@ -74,7 +74,7 @@ func main() {
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	for {
 		sig := <-ch
-		slog.Verbose("got signal:", sig)
+		slog.Info("got signal:", sig)
 		if sig != syscall.SIGHUP {
 			_, _ = daemon.Notify(daemon.Stopping)
 			break
