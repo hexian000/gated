@@ -175,7 +175,7 @@ func (p *peer) Bootstrap() {
 	}
 	ctx := p.server.canceller.WithTimeout(p.cfg.Timeout())
 	defer p.server.canceller.Cancel(ctx)
-	slog.Verbosef("bootstrap: setup connection to %s", info.Address)
+	slog.Infof("bootstrap: setup connection to %s", info.Address)
 	setupBegin := time.Now()
 	dialer := net.Dialer{}
 	tcpConn, err := dialer.DialContext(ctx, network, info.Address)

@@ -185,7 +185,7 @@ func (s *Server) FindProxy(peer string, tryDirect, fast bool) (string, error) {
 		})
 	}
 	if len(list) < 1 {
-		return "", fmt.Errorf("find proxy: %s is unreachable", peer)
+		return "", fmt.Errorf("%q is unreachable", peer)
 	} else if len(list) > 1 {
 		sort.SliceStable(list, func(i int, j int) bool {
 			if list[i].ttl == list[j].ttl {
