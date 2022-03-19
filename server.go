@@ -82,14 +82,20 @@ func (s *Server) LocalPeerName() string {
 }
 
 func (s *Server) BootstrapFromConfig() {
+	wg := sync.WaitGroup{}
 	cfg := s.cfg.Current()
 	for _, server := range cfg.Servers {
 		p := newPeer(s)
 		p.info.Address = server.Address
 		p.info.ServerName = server.ServerName
 		p.info.Online = true
-		go p.Bootstrap()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			p.Bootstrap()
+		}()
 	}
+	wg.Wait()
 }
 
 func (s *Server) Start() error {
@@ -280,7 +286,7 @@ func (s *Server) maintenance() {
 	}
 	if count, _ := s.updateStatus(); count < 2 {
 		if !s.randomRedial() && count < 1 {
-			s.BootstrapFromConfig()
+			go s.BootstrapFromConfig()
 		}
 		return
 	}
