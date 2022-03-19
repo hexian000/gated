@@ -260,7 +260,14 @@ const (
 func (s *Server) maintenance() {
 	cfg := s.cfg.Current()
 	selfHasAddr := cfg.AdvertiseAddr != ""
+	idleEnabled := cfg.Transport.IdleTimeout > 0
 	idleTimeout := time.Duration(cfg.Transport.IdleTimeout) * time.Second
+	if count, _ := s.updateStatus(); count < 2 {
+		idleEnabled = false
+		if !s.randomRedial() && count < 1 {
+			go s.BootstrapFromConfig()
+		}
+	}
 	for name, p := range s.getPeers() {
 		info, connected := p.PeerInfo()
 		if !info.Online {
@@ -274,7 +281,8 @@ func (s *Server) maintenance() {
 		peerHasAddr := info.Address != ""
 		if connected {
 			p.Seen(false)
-			if selfHasAddr && peerHasAddr &&
+			if idleEnabled && selfHasAddr && peerHasAddr &&
+				name != cfg.Routes.Default &&
 				time.Since(p.LastUsed()) > idleTimeout {
 				slog.Infof("idle timeout expired: %q", info.PeerName)
 				_ = p.Close()
@@ -282,15 +290,9 @@ func (s *Server) maintenance() {
 			continue
 		}
 		if peerHasAddr && !selfHasAddr {
-			slog.Infof("redial %q: %q", info.PeerName, info.Address)
+			slog.Infof("always redial %q: %q", info.PeerName, info.Address)
 			go p.Bootstrap()
 		}
-	}
-	if count, _ := s.updateStatus(); count < 2 {
-		if !s.randomRedial() && count < 1 {
-			go s.BootstrapFromConfig()
-		}
-		return
 	}
 }
 

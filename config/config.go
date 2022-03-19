@@ -72,7 +72,7 @@ func New() *Main {
 			KeepAliveInterval: 15,
 			Timeout:           15,
 			WriteTimeout:      15,
-			IdleTimeout:       72 * 60 * 60,
+			IdleTimeout:       15 * 60,
 			StreamWindow:      256 * 1024,
 		},
 		LogLevel: slog.LevelInfo,
