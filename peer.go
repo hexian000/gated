@@ -164,10 +164,10 @@ func (p *peer) serve(l net.Listener) {
 func (p *peer) Bootstrap(ctx context.Context) (*yamux.Session, error) {
 	info, _ := p.PeerInfo()
 	if info.Address == "" {
-		return nil, fmt.Errorf("peer %q has no address", info.PeerName)
+		return nil, fmt.Errorf("bootstrap: peer %q has no address", info.PeerName)
 	}
 	if !info.Online {
-		return nil, fmt.Errorf("peer %q is offline", info.PeerName)
+		return nil, fmt.Errorf("bootstrap: peer %q is offline", info.PeerName)
 	}
 	p.bootstrapCh <- struct{}{}
 	defer func() {
@@ -221,7 +221,7 @@ func (p *peer) Bootstrap(ctx context.Context) (*yamux.Session, error) {
 	p.UpdateInfo(&cluster.Self)
 	p.Seen(true)
 	p.Bind(muxConn, meteredConn)
-	slog.Infof("dial %v: ok, remote name: %q, setup: %v", connId, cluster.Self.PeerName, time.Since(setupBegin))
+	slog.Infof("bootstrap %v: ok, remote name: %q, setup: %v", connId, cluster.Self.PeerName, time.Since(setupBegin))
 	p.server.addPeer(p)
 	p.server.router.setProxy(cluster.Self.PeerName, "")
 	p.server.MergeCluster(&cluster)
