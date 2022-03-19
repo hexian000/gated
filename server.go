@@ -83,19 +83,12 @@ func (s *Server) LocalPeerName() string {
 
 func (s *Server) BootstrapFromConfig() {
 	cfg := s.cfg.Current()
-	timeout := time.Duration(cfg.Transport.Timeout) * time.Second
 	for _, server := range cfg.Servers {
 		p := newPeer(s)
 		p.info.Address = server.Address
 		p.info.ServerName = server.ServerName
 		p.info.Online = true
-		go func() {
-			ctx := s.canceller.WithTimeout(timeout)
-			defer s.canceller.Cancel(ctx)
-			if _, err := p.Bootstrap(ctx); err != nil {
-				slog.Error("start:", err)
-			}
-		}()
+		go p.Bootstrap()
 	}
 }
 
@@ -160,26 +153,6 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		}
 	}()
 	return nil
-}
-
-func (s *Server) bootstrapAll() <-chan error {
-	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
-	defer s.canceller.Cancel(ctx)
-	ch := make(chan error, 10)
-	wg := &sync.WaitGroup{}
-	for _, p := range s.getPeers() {
-		wg.Add(1)
-		go func(p *peer) {
-			defer wg.Done()
-			_, err := p.Bootstrap(ctx)
-			ch <- err
-		}(p)
-	}
-	go func() {
-		defer close(ch)
-		wg.Wait()
-	}()
-	return ch
 }
 
 func (s *Server) FindProxy(peer string, tryDirect, fast bool) (string, error) {
@@ -302,26 +275,12 @@ func (s *Server) maintenance() {
 		}
 		if peerHasAddr && !selfHasAddr {
 			slog.Infof("redial %q: %q", info.PeerName, info.Address)
-			go func(p *peer) {
-				ctx := s.canceller.WithTimeout(s.cfg.Timeout())
-				defer s.canceller.Cancel(ctx)
-				if _, err := p.Bootstrap(ctx); err != nil {
-					slog.Errorf("redial %q: %v", info.PeerName, err)
-				}
-			}(p)
+			go p.Bootstrap()
 		}
 	}
 	if count, _ := s.updateStatus(); count < 2 {
-		if err := s.randomRedial(); err != nil {
-			slog.Error("random redial:", err)
-			if count < 1 {
-				for err := range s.bootstrapAll() {
-					if err == nil {
-						return
-					}
-				}
-				s.BootstrapFromConfig()
-			}
+		if !s.randomRedial() && count < 1 {
+			s.BootstrapFromConfig()
 		}
 		return
 	}

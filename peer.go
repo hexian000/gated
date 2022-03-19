@@ -26,7 +26,7 @@ type peer struct {
 	lastUsed   time.Time
 	lastUpdate time.Time
 
-	bootstrapCh chan struct{}
+	bootstrapMu sync.RWMutex
 
 	server   *Server
 	cfg      *Config
@@ -35,10 +35,9 @@ type peer struct {
 
 func newPeer(s *Server) *peer {
 	return &peer{
-		bootstrapCh: make(chan struct{}, 1),
-		server:      s,
-		cfg:         s.cfg,
-		resolver:    s.router,
+		server:   s,
+		cfg:      s.cfg,
+		resolver: s.router,
 	}
 }
 
@@ -132,10 +131,8 @@ func (p *peer) DialContext(ctx context.Context) (conn net.Conn, err error) {
 	defer p.Seen(err == nil)
 	mux := p.MuxSession()
 	if mux == nil || mux.IsClosed() {
-		mux, err = p.Bootstrap(ctx)
-		if err != nil {
-			return
-		}
+		go p.Bootstrap()
+		return nil, fmt.Errorf("peer %q temporarily not reachable", p.Name())
 	}
 	return mux.Open()
 }
@@ -161,29 +158,30 @@ func (p *peer) serve(l net.Listener) {
 	_ = server.Serve(l)
 }
 
-func (p *peer) Bootstrap(ctx context.Context) (*yamux.Session, error) {
+func (p *peer) Bootstrap() {
 	info, _ := p.PeerInfo()
 	if info.Address == "" {
-		return nil, fmt.Errorf("bootstrap: peer %q has no address", info.PeerName)
+		slog.Errorf("bootstrap: peer %q has no address", info.PeerName)
+		return
 	}
 	if !info.Online {
-		return nil, fmt.Errorf("bootstrap: peer %q is offline", info.PeerName)
+		slog.Errorf("bootstrap: peer %q is offline", info.PeerName)
+		return
 	}
-	p.bootstrapCh <- struct{}{}
-	defer func() {
-		<-p.bootstrapCh
-	}()
+	p.bootstrapMu.Lock()
+	defer p.bootstrapMu.Unlock()
 	if mux := p.MuxSession(); mux != nil && !mux.IsClosed() {
-		return mux, nil
+		return
 	}
-
+	ctx := p.server.canceller.WithTimeout(p.cfg.Timeout())
+	defer p.server.canceller.Cancel(ctx)
 	slog.Verbosef("bootstrap: setup connection to %s", info.Address)
 	setupBegin := time.Now()
 	dialer := net.Dialer{}
 	tcpConn, err := dialer.DialContext(ctx, network, info.Address)
 	if err != nil {
 		slog.Errorf("bootstrap: %v", err)
-		return nil, err
+		return
 	}
 	connId := tcpConn.RemoteAddr()
 	meteredConn := util.Meter(tcpConn)
@@ -192,19 +190,20 @@ func (p *peer) Bootstrap(ctx context.Context) (*yamux.Session, error) {
 	if err != nil {
 		_ = tcpConn.Close()
 		slog.Errorf("bootstrap %v: %v", connId, err)
-		return nil, err
+		return
 	}
 	p.cfg.SetConnParams(tcpConn)
 	muxConn, err := yamux.Client(tlsConn, p.server.cfg.MuxConfig())
 	if err != nil {
 		_ = tlsConn.Close()
 		slog.Errorf("bootstrap %v: %v", connId, err)
-		return nil, err
+		return
 	}
 	conn, err := muxConn.Open()
 	if err != nil {
+		slog.Errorf("bootstrap %v: mux open: %v", connId, err)
 		_ = muxConn.Close()
-		return nil, err
+		return
 	}
 	deadline, ok := ctx.Deadline()
 	if !ok {
@@ -214,8 +213,9 @@ func (p *peer) Bootstrap(ctx context.Context) (*yamux.Session, error) {
 	slog.Verbosef("bootstrap %v: call RPC.Bootstrap: %v", connId, bootstrapMsg)
 	var cluster proto.Cluster
 	if err := p.call(conn, deadline, "RPC.Bootstrap", bootstrapMsg, &cluster); err != nil {
+		slog.Errorf("bootstrap %v: RPC.Bootstrap: %v", connId, err)
 		_ = muxConn.Close()
-		return nil, err
+		return
 	}
 	slog.Verbosef("bootstrap %v: reply: %v", connId, cluster)
 	p.UpdateInfo(&cluster.Self)
@@ -225,7 +225,6 @@ func (p *peer) Bootstrap(ctx context.Context) (*yamux.Session, error) {
 	p.server.addPeer(p)
 	p.server.router.setProxy(cluster.Self.PeerName, "")
 	p.server.MergeCluster(&cluster)
-	return muxConn, nil
 }
 
 func (p *peer) GoAway() (err error) {

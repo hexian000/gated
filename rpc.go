@@ -3,7 +3,6 @@ package gated
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -62,7 +61,7 @@ func (p *peer) Call(ctx context.Context, method string, args interface{}, reply 
 	return p.call(conn, deadline, method, args, reply)
 }
 
-func (s *Server) randomRedial() error {
+func (s *Server) randomRedial() bool {
 	p := func() *peer {
 		set := make([]*peer, 0)
 		for _, p := range s.getPeers() {
@@ -77,13 +76,11 @@ func (s *Server) randomRedial() error {
 		return set[rand.Intn(len(set))]
 	}()
 	if p == nil {
-		return errors.New("no available peer")
+		return false
 	}
 	slog.Debugf("random redial: %q", p.info.PeerName)
-	ctx := s.canceller.WithTimeout(s.cfg.Timeout())
-	defer s.canceller.Cancel(ctx)
-	_, err := p.Bootstrap(ctx)
-	return err
+	p.Bootstrap()
+	return true
 }
 
 type rpcResult struct {
