@@ -103,7 +103,7 @@ func (s *Server) updatePeerInfo(info *proto.PeerInfo) bool {
 	p.UpdateInfo(info)
 	s.addPeer(p)
 	if info.Address == "" {
-		go s.router.updateProxy(info.PeerName, false)
+		go s.router.findProxy(info.PeerName, false)
 	}
 	return true
 }

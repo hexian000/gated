@@ -153,34 +153,26 @@ func (r *Router) getProxy(destination string, timeout time.Duration) string {
 		return ""
 	}
 	if time.Since(info.updated) > timeout {
-		go r.updateProxy(destination, true)
+		go r.findProxy(destination, true)
 		return info.proxy
 	}
 	return info.proxy
 }
 
-func (r *Router) lockProxy(destination string) bool {
-	r.proxyMu.Lock()
-	defer r.proxyMu.Unlock()
-	info, ok := r.proxy[destination]
-	if !ok {
-		r.proxy[destination] = peerProxy{
-			ready: false,
-		}
-		return true
-	}
-	if !info.ready {
-		return false
-	}
-	return true
-}
-
 func (r *Router) setProxy(destination, proxy string) {
 	r.proxyMu.Lock()
 	defer r.proxyMu.Unlock()
+
+	oldProxy := ""
+	if info, ok := r.proxy[destination]; ok {
+		oldProxy = info.proxy
+	}
+	if oldProxy != proxy {
+		defer slog.Infof("proxy to %q changed: %q -> %q", destination, oldProxy, proxy)
+	}
+
 	if proxy == "" || proxy == destination {
 		delete(r.proxy, destination)
-		defer slog.Infof("connections to %q now goes direct", destination)
 		return
 	}
 	r.proxy[destination] = peerProxy{
@@ -188,18 +180,29 @@ func (r *Router) setProxy(destination, proxy string) {
 		proxy:   proxy,
 		updated: time.Now(),
 	}
-	defer slog.Infof("connections to %q now goes %q", destination, proxy)
 }
 
-func (r *Router) updateProxy(destination string, tryDirect bool) {
-	if !r.lockProxy(destination) {
+func (r *Router) findProxy(destination string, tryDirect bool) {
+	if !func(destination string) bool {
+		r.proxyMu.Lock()
+		defer r.proxyMu.Unlock()
+		info, ok := r.proxy[destination]
+		if !ok {
+			r.proxy[destination] = peerProxy{
+				ready: false,
+			}
+			return true
+		}
+		return info.ready
+	}(destination) {
 		return
 	}
+	slog.Verbosef("updating proxy to %q", destination)
 	proxy, err := r.server.FindProxy(destination, tryDirect, true)
 	if err != nil {
 		proxy, err = r.server.FindProxy(destination, tryDirect, false)
 		if err != nil {
-			slog.Error("update proxy:", err)
+			slog.Error("find proxy:", err)
 		}
 	}
 	r.setProxy(destination, proxy)
@@ -210,7 +213,7 @@ func (r *Router) dialProxyContext(ctx context.Context, peer string) (net.Conn, e
 	if err == nil {
 		return conn, nil
 	}
-	go r.updateProxy(peer, false)
+	go r.findProxy(peer, false)
 	return nil, err
 }
 

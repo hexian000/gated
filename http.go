@@ -230,7 +230,7 @@ func (h *apiHandler) ServeConnect(w http.ResponseWriter, req *http.Request) {
 		slog.Debug("http connect: CONNECT ", req.Host)
 		dialed, err = proxy.Client(ctx, dialed, req.Host)
 		if err != nil {
-			slog.Warning("http connect:", err)
+			slog.Verbose("http connect:", err)
 			h.gatewayError(w, err)
 			return
 		}
