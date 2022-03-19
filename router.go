@@ -164,7 +164,7 @@ func (r *Router) setProxy(destination, proxy string) {
 	defer r.proxyMu.Unlock()
 
 	oldProxy := ""
-	if info, ok := r.proxy[destination]; ok {
+	if info, ok := r.proxy[destination]; ok && info.ready {
 		oldProxy = info.proxy
 	}
 	if oldProxy != proxy {
