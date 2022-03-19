@@ -110,7 +110,6 @@ func (s *Server) Start() error {
 		s.tlsListener = l
 		go s.Serve(l)
 	}
-	s.BootstrapFromConfig()
 	if cfg.HTTPListen != "" {
 		slog.Info("http listen:", cfg.HTTPListen)
 		l, err := net.Listen(network, cfg.HTTPListen)
@@ -119,6 +118,9 @@ func (s *Server) Start() error {
 			return err
 		}
 		s.httpListener = l
+	}
+	s.BootstrapFromConfig()
+	if l := s.httpListener; l != nil {
 		go s.httpServer.Serve(l)
 	}
 	go s.watchdog()
