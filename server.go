@@ -265,7 +265,7 @@ func (s *Server) maintenance() {
 	if count, _ := s.updateStatus(); count < 2 {
 		idleEnabled = false
 		if !s.randomRedial() && count < 1 {
-			go s.BootstrapFromConfig()
+			s.BootstrapFromConfig()
 		}
 	}
 	for name, p := range s.getPeers() {
@@ -276,7 +276,6 @@ func (s *Server) maintenance() {
 				s.deletePeer(name)
 				s.router.deletePeer(name)
 			}
-			continue
 		}
 		peerHasAddr := info.Address != ""
 		if connected {
@@ -291,7 +290,7 @@ func (s *Server) maintenance() {
 		}
 		if peerHasAddr && !selfHasAddr {
 			slog.Infof("always redial %q: %q", info.PeerName, info.Address)
-			go p.Bootstrap()
+			p.Bootstrap()
 		}
 	}
 }
