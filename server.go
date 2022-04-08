@@ -271,7 +271,8 @@ func (s *Server) maintenance() {
 	for name, p := range s.getPeers() {
 		info, connected := p.PeerInfo()
 		if !info.Online {
-			if time.Since(p.LastUpdate()) > peerInfoTimeout {
+			lastUpdate := p.LastUpdate()
+			if time.Since(lastUpdate) > peerInfoTimeout {
 				slog.Infof("peer info timeout expired: %q", info.PeerName)
 				s.deletePeer(name)
 				s.router.deletePeer(name)
@@ -280,9 +281,10 @@ func (s *Server) maintenance() {
 		peerHasAddr := info.Address != ""
 		if connected {
 			p.Seen(false)
+			lastUsed := p.LastUsed()
 			if idleEnabled && selfHasAddr && peerHasAddr &&
 				name != cfg.Routes.Default &&
-				time.Since(p.LastUsed()) > idleTimeout {
+				lastUsed != (time.Time{}) && time.Since(p.LastUsed()) > idleTimeout {
 				slog.Infof("idle timeout expired: %q", info.PeerName)
 				_ = p.Close()
 			}

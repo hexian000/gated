@@ -60,9 +60,9 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 			if numStreams > 0 {
 				status = fmt.Sprintf("%d streams", numStreams)
 			} else if info.Address == "" {
-				status = "linger, " + now.Sub(lastUsed).String()
+				status = "linger, " + formatAgo(now, lastUsed)
 			} else {
-				status = "idle, " + now.Sub(lastUsed).String()
+				status = "idle, " + formatAgo(now, lastUsed)
 			}
 		}
 		writef("    %-16s  %s\n", "Status:", status)
