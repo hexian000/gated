@@ -131,8 +131,11 @@ func (p *peer) DialContext(ctx context.Context) (conn net.Conn, err error) {
 	defer p.Seen(err == nil)
 	mux := p.MuxSession()
 	if mux == nil || mux.IsClosed() {
-		go p.Bootstrap()
-		return nil, fmt.Errorf("peer %q temporarily not reachable", p.Name())
+		p.Bootstrap()
+		mux = p.MuxSession()
+		if mux == nil || mux.IsClosed() {
+			return nil, fmt.Errorf("peer %q temporarily not reachable", p.Name())
+		}
 	}
 	return mux.Open()
 }
