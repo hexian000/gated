@@ -48,7 +48,7 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		if info.Address != "" {
 			writef("    %-16s  %q\n", "Address:", info.Address)
 		} else {
-			writef("    %-16s  %s\n", "Address:", "(unreachable)")
+			writef("    %-16s  %s\n", "Address:", "(none)")
 		}
 		lastUsed := p.LastUsed()
 		status := "disconnected"
@@ -67,7 +67,7 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 		}
 		writef("    %-16s  %s\n", "Status:", status)
 		if proxy := s.router.getProxy(name, cacheTimeout); proxy == "" {
-			writef("    %-16s  %s\n", "Proxy:", "(direct)")
+			writef("    %-16s  %s\n", "Proxy:", "(none)")
 		} else {
 			writef("    %-16s  %q\n", "Proxy:", proxy)
 		}
