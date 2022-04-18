@@ -73,7 +73,6 @@ func (c *Config) Load(cfg *config.Main) error {
 		MaxStreamWindowSize:    cfg.Transport.StreamWindow,
 		StreamOpenTimeout:      timeout,
 		StreamCloseTimeout:     timeout,
-		Logger:                 newYamuxLogger(),
 	}
 	if err = yamux.VerifyConfig(muxCfg); err != nil {
 		return err
@@ -114,10 +113,12 @@ func (c *Config) TLSConfig(sni string) *tls.Config {
 	return cfg
 }
 
-func (c *Config) MuxConfig() *yamux.Config {
+func (c *Config) MuxConfig(tag string) *yamux.Config {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.mux
+	cfg := *c.mux
+	cfg.Logger = newYamuxLogger(tag)
+	return &cfg
 }
 
 func (c *Config) Current() *config.Main {

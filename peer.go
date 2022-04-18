@@ -196,7 +196,7 @@ func (p *peer) Bootstrap() {
 		return
 	}
 	p.cfg.SetConnParams(tcpConn)
-	muxConn, err := yamux.Client(tlsConn, p.server.cfg.MuxConfig())
+	muxConn, err := yamux.Client(tlsConn, p.server.cfg.MuxConfig(connId.String()))
 	if err != nil {
 		_ = tlsConn.Close()
 		slog.Errorf("bootstrap %v: %v", connId, err)

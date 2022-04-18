@@ -14,6 +14,7 @@ func init() {
 }
 
 type yamuxLogWrapper struct {
+	tag string
 	*slog.Logger
 }
 
@@ -30,8 +31,8 @@ func (w *yamuxLogWrapper) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func newYamuxLogger() *log.Logger {
-	return log.New(&yamuxLogWrapper{slog.Default()}, "", 0)
+func newYamuxLogger(tag string) *log.Logger {
+	return log.New(&yamuxLogWrapper{tag, slog.Default()}, "", 0)
 }
 
 type logWrapper struct {

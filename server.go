@@ -232,7 +232,7 @@ func (s *Server) serve(tcpConn net.Conn) {
 		return
 	}
 	s.cfg.SetConnParams(tcpConn)
-	muxConn, err := yamux.Server(tlsConn, s.cfg.MuxConfig())
+	muxConn, err := yamux.Server(tlsConn, s.cfg.MuxConfig(connId.String()))
 	if err != nil {
 		slog.Errorf("serve %v: %v", connId, err)
 		_ = tlsConn.Close()
