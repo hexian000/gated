@@ -252,7 +252,10 @@ func (s *Server) OnPeerLost(p *peer) {
 	if idleEnabled && time.Since(p.LastUsed()) > idleTimeout {
 		return
 	}
-	s.router.UpdateProxy(info.PeerName)
+	if info.Online && info.Address != "" {
+		// try to keep peer available
+		s.router.UpdateProxy(info.PeerName)
+	}
 }
 
 func (s *Server) closeAllSessions() {
