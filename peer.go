@@ -159,6 +159,7 @@ func (p *peer) serve(l net.Listener) {
 		ErrorLog:          newHTTPLogger(),
 	}
 	_ = server.Serve(l)
+	p.server.OnPeerLost(p)
 }
 
 func (p *peer) Bootstrap() {

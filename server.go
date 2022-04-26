@@ -243,6 +243,20 @@ func (s *Server) serve(tcpConn net.Conn) {
 	slog.Infof("serve %v: rpc online, setup: %v", connId, time.Since(setupBegin))
 }
 
+func (s *Server) OnPeerLost(p *peer) {
+	name := p.Name()
+	cfg := s.cfg.Current()
+	idleEnabled := cfg.Transport.IdleTimeout > 0
+	idleTimeout := time.Duration(cfg.Transport.IdleTimeout) * time.Second
+	if idleEnabled && time.Since(p.LastUsed()) > idleTimeout {
+		slog.Infof("peer lost: %q", name)
+		return
+	}
+	// redial if not idle
+	slog.Infof("peer lost: %q, redial", name)
+	p.Bootstrap()
+}
+
 func (s *Server) closeAllSessions() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
