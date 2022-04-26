@@ -244,17 +244,15 @@ func (s *Server) serve(tcpConn net.Conn) {
 }
 
 func (s *Server) OnPeerLost(p *peer) {
-	name := p.Name()
+	info, _ := p.PeerInfo()
+	slog.Infof("peer lost: %q", info.PeerName)
 	cfg := s.cfg.Current()
 	idleEnabled := cfg.Transport.IdleTimeout > 0
 	idleTimeout := time.Duration(cfg.Transport.IdleTimeout) * time.Second
 	if idleEnabled && time.Since(p.LastUsed()) > idleTimeout {
-		slog.Infof("peer lost: %q", name)
 		return
 	}
-	// redial if not idle
-	slog.Infof("peer lost: %q, redial", name)
-	p.Bootstrap()
+	s.router.UpdateProxy(info.PeerName)
 }
 
 func (s *Server) closeAllSessions() {
