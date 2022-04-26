@@ -146,7 +146,7 @@ func (r *Router) Proxy(req *http.Request) (*url.URL, error) {
 }
 
 func (r *Router) UpdateProxy(destination string) {
-	r.findProxy(destination, true)
+	r.findProxy(destination, false)
 }
 
 func (r *Router) getProxy(destination string, timeout time.Duration) string {
