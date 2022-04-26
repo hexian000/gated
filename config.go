@@ -73,6 +73,7 @@ func (c *Config) Load(cfg *config.Main) error {
 		MaxStreamWindowSize:    cfg.Transport.StreamWindow,
 		StreamOpenTimeout:      timeout,
 		StreamCloseTimeout:     timeout,
+		Logger:                 newYamuxLogger("<?>"),
 	}
 	if err = yamux.VerifyConfig(muxCfg); err != nil {
 		return err
