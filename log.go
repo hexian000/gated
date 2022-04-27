@@ -1,6 +1,7 @@
 package gated
 
 import (
+	"fmt"
 	"log"
 	"strings"
 
@@ -22,17 +23,20 @@ func (w *yamuxLogWrapper) Write(p []byte) (n int, err error) {
 	const calldepth = 4
 	raw := string(p)
 	if msg := strings.TrimPrefix(raw, "[ERR] "); len(msg) != len(raw) {
-		w.Output(calldepth, slog.LevelError, msg)
+		w.Output(calldepth, slog.LevelError, w.tag+" "+msg)
 	} else if msg := strings.TrimPrefix(raw, "[WARN] "); len(msg) != len(raw) {
-		w.Output(calldepth, slog.LevelWarning, msg)
+		w.Output(calldepth, slog.LevelWarning, w.tag+" "+msg)
 	} else {
-		w.Output(calldepth, slog.LevelError, raw)
+		w.Output(calldepth, slog.LevelError, w.tag+" "+raw)
 	}
 	return len(p), nil
 }
 
-func newYamuxLogger(tag string) *log.Logger {
-	return log.New(&yamuxLogWrapper{tag, slog.Default()}, "", 0)
+func newYamuxLogger(connId string) *log.Logger {
+	return log.New(&yamuxLogWrapper{
+		fmt.Sprintf("<%s>", connId),
+		slog.Default(),
+	}, "", 0)
 }
 
 type logWrapper struct {
