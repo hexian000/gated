@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
@@ -78,12 +77,11 @@ func (r *Router) makeURL(peer string) *url.URL {
 }
 
 func (r *Router) merge(routes map[string]string) {
-	cfg := r.server.cfg.Current()
-	localhost := cfg.Name + "." + cfg.Domain
+	localPeer := r.server.cfg.Current().Name
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for host, peer := range routes {
-		if strings.EqualFold(host, localhost) {
+		if peer == localPeer {
 			r.routes[host] = ""
 		} else {
 			r.routes[host] = peer
@@ -112,11 +110,16 @@ func (r *Router) deletePeer(name string) {
 }
 
 func (r *Router) Routes() map[string]string {
+	localPeer := r.server.cfg.Current().Name
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	routes := make(map[string]string)
 	for host, peer := range r.routes {
-		routes[host] = peer
+		if peer == "" {
+			routes[host] = localPeer
+		} else {
+			routes[host] = peer
+		}
 	}
 	return routes
 }
