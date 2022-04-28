@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -75,10 +76,15 @@ func (r *Router) makeURL(peer string) *url.URL {
 }
 
 func (r *Router) merge(routes map[string]string) {
+	domain := r.server.cfg.Current().Domain
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for host, peer := range routes {
-		r.routes[host] = peer
+		if strings.EqualFold(host, peer+"."+domain) {
+			r.routes[host] = ""
+		} else {
+			r.routes[host] = peer
+		}
 		slog.Verbosef("merge route: %q via %q", host, peer)
 	}
 }
