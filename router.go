@@ -78,11 +78,12 @@ func (r *Router) makeURL(peer string) *url.URL {
 }
 
 func (r *Router) merge(routes map[string]string) {
-	domain := r.server.cfg.Current().Domain
+	cfg := r.server.cfg.Current()
+	localhost := cfg.Name + "." + cfg.Domain
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for host, peer := range routes {
-		if strings.EqualFold(host, peer+"."+domain) {
+		if strings.EqualFold(host, localhost) {
 			r.routes[host] = ""
 		} else {
 			r.routes[host] = peer
