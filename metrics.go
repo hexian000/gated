@@ -88,7 +88,11 @@ func (s *Server) CollectMetrics(w *bufio.Writer) {
 	s.canceller.CollectMetrics(w)
 	_, _ = w.WriteString("\n")
 
-	_, _ = w.WriteString("=== Stack ===\n\n")
-	(&metric.Stack{}).CollectMetrics(w)
+	_, _ = w.WriteString("=== Routes ===\n\n")
+	s.router.CollectMetrics(w)
 	_, _ = w.WriteString("\n")
+
+	// _, _ = w.WriteString("=== Stack ===\n\n")
+	// (&metric.Stack{}).CollectMetrics(w)
+	// _, _ = w.WriteString("\n")
 }

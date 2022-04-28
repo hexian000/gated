@@ -1,7 +1,9 @@
 package gated
 
 import (
+	"bufio"
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -33,7 +35,7 @@ type Router struct {
 
 type peerProxy struct {
 	ready   bool
-	proxy   string
+	peer    string
 	updated time.Time
 }
 
@@ -164,9 +166,9 @@ func (r *Router) getProxy(destination string, timeout time.Duration) string {
 	}
 	if time.Since(info.updated) > timeout {
 		go r.findProxy(destination, true)
-		return info.proxy
+		return info.peer
 	}
-	return info.proxy
+	return info.peer
 }
 
 func (r *Router) setProxy(destination, proxy string) {
@@ -175,7 +177,7 @@ func (r *Router) setProxy(destination, proxy string) {
 
 	oldProxy := ""
 	if info, ok := r.proxy[destination]; ok && info.ready {
-		oldProxy = info.proxy
+		oldProxy = info.peer
 	}
 	if oldProxy != proxy {
 		defer slog.Infof("proxy to %q changed: %q -> %q", destination, oldProxy, proxy)
@@ -187,7 +189,7 @@ func (r *Router) setProxy(destination, proxy string) {
 	}
 	r.proxy[destination] = peerProxy{
 		ready:   true,
-		proxy:   proxy,
+		peer:    proxy,
 		updated: time.Now(),
 	}
 }
@@ -247,4 +249,15 @@ func (r *Router) DialContext(ctx context.Context, network, addr string) (net.Con
 		return host
 	}(host)
 	return r.dialer.DialContext(ctx, network, net.JoinHostPort(host, port))
+}
+
+func (r *Router) CollectMetrics(w *bufio.Writer) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for host, peer := range r.routes {
+		w.WriteString(fmt.Sprintf("Route: %q -> %q\n", host, peer))
+	}
+	for peer, proxy := range r.proxy {
+		w.WriteString(fmt.Sprintf("Proxy: %q -> %q\n", peer, proxy.peer))
+	}
 }
