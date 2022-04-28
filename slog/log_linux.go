@@ -79,5 +79,8 @@ func (l *Logger) Output(calldepth int, level int, s string) {
 		buf = append(buf, '\n')
 	}
 	l.buf = buf
+	if l.linebuf != nil {
+		l.linebuf.Append(buf)
+	}
 	l.out.Write(buf)
 }
