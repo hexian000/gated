@@ -3,6 +3,7 @@
 package slog
 
 import (
+	"io"
 	"log/syslog"
 	"net"
 	"net/url"
@@ -48,11 +49,15 @@ func (l *Logger) ParseOutput(output, tag string) error {
 
 func (l *Logger) Output(calldepth int, level int, s string) {
 	now := time.Now()
-	if func() bool {
+	out := func() io.Writer {
 		l.mu.Lock()
 		defer l.mu.Unlock()
-		return l.out != nil && level < l.level
-	}() {
+		if level < l.level {
+			return l.out
+		}
+		return nil
+	}()
+	if out == nil {
 		return
 	}
 	_, file, line, ok := runtime.Caller(calldepth)
@@ -82,5 +87,5 @@ func (l *Logger) Output(calldepth int, level int, s string) {
 	if l.linebuf != nil {
 		l.linebuf.Append(buf)
 	}
-	l.out.Write(buf)
+	out.Write(buf)
 }
