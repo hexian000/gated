@@ -69,7 +69,7 @@ func New() *Main {
 		Transport: Transport{
 			NoDelay:           false,
 			Linger:            15,
-			KeepAliveInterval: 15,
+			KeepAliveInterval: 5,
 			Timeout:           15,
 			WriteTimeout:      15,
 			IdleTimeout:       15 * 60,
