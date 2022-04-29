@@ -4,6 +4,7 @@ package slog
 
 import (
 	"errors"
+	"io"
 	"net"
 	"net/url"
 	"os"
