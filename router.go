@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"sync"
 	"time"
 
@@ -258,10 +259,20 @@ func (r *Router) DialContext(ctx context.Context, network, addr string) (net.Con
 func (r *Router) CollectMetrics(w *bufio.Writer) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	lines := make([]string, 0)
 	for host, peer := range r.routes {
-		w.WriteString(fmt.Sprintf("Route: %q -> %q\n", host, peer))
+		lines = append(lines, fmt.Sprintf("Route: %q -> %q\n", host, peer))
 	}
+	sort.Strings(lines)
+	for _, line := range lines {
+		w.WriteString(line)
+	}
+	w.WriteRune('\n')
+	lines = make([]string, 0)
 	for peer, proxy := range r.proxy {
-		w.WriteString(fmt.Sprintf("Proxy: %q -> %q\n", peer, proxy.peer))
+		lines = append(lines, fmt.Sprintf("Proxy: %q -> %q\n", peer, proxy.peer))
+	}
+	for _, line := range lines {
+		w.WriteString(line)
 	}
 }
