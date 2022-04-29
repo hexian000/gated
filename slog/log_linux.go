@@ -53,9 +53,9 @@ func (l *Logger) Output(calldepth int, level int, s string) {
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		if level < l.level {
-			return l.out
+			return nil
 		}
-		return nil
+		return l.out
 	}()
 	if out == nil {
 		return
