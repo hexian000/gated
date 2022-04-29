@@ -28,8 +28,6 @@ type Logger struct {
 	mu    sync.RWMutex
 	level int
 	buf   []byte
-
-	linebuf *LineBuffer
 }
 
 var std = &Logger{out: os.Stderr}
@@ -42,25 +40,6 @@ func (l *Logger) SetLevel(level int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.level = level
-}
-
-func (l *Logger) SetLineBufSize(size int) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if size < 1 {
-		l.linebuf = nil
-		return
-	}
-	l.linebuf = NewLineBuffer(size)
-}
-
-func (l *Logger) ReadLineBuf() string {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	if l.linebuf == nil {
-		return ""
-	}
-	return l.linebuf.Read()
 }
 
 func (l *Logger) SetOutput(out io.Writer) {
