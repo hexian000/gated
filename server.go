@@ -145,12 +145,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		_ = p.GoAway()
 	}
 	s.canceller.CancelAll()
-	for call := range s.Broadcast(ctx, "RPC.Update", "", false, s.ClusterInfo(), reflect.TypeOf(proto.Cluster{})) {
-		if call.err != nil {
-			slog.Debugf("call RPC.Update: %v", call.err)
-			continue
-		}
-	}
+	// for call := range s.Broadcast(ctx, "RPC.Update", "", false, s.ClusterInfo(), reflect.TypeOf(proto.Cluster{})) {
+	// 	if call.err != nil {
+	// 		slog.Debugf("call RPC.Update: %v", call.err)
+	// 		continue
+	// 	}
+	// }
 	s.forwarder.Shutdown()
 	func() {
 		s.mu.Lock()
