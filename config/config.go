@@ -67,7 +67,7 @@ func New() *Main {
 			CacheTimeout: 15 * 60,
 		},
 		Transport: Transport{
-			NoDelay:           false,
+			NoDelay:           true,
 			Linger:            15,
 			KeepAliveInterval: 5,
 			Timeout:           15,
