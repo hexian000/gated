@@ -16,7 +16,7 @@ fi
 echo "+ version: ${VERSION}"
 
 GOFLAGS="-trimpath"
-LDFLAGS=""
+LDFLAGS="-s -w"
 if [ -n "${VERSION}" ]; then
     LDFLAGS="${LDFLAGS} -X github.com/hexian000/gated/version.tag=${VERSION}"
 fi
